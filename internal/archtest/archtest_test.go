@@ -29,11 +29,12 @@ var allowed = map[string][]string{
 	"internal/agent":    {},
 	"internal/discover": {},
 	"internal/policy":   {"internal/model"},
-	"internal/safety":   {"internal/model", "internal/policy"},
+	"internal/safety":   {"internal/model", "internal/policy", "internal/procs"},
+	"internal/procs":    {},
 	"internal/oplog":    {},
 	"internal/restore":  {"internal/model", "internal/gitx", "internal/oplog"},
 	"internal/plan": {"internal/model", "internal/gitx", "internal/inspect", "internal/verdict",
-		"internal/policy", "internal/safety", "internal/oplog", "internal/sizer"},
+		"internal/policy", "internal/safety", "internal/oplog", "internal/sizer", "internal/procs"},
 }
 
 // importers restricts who may import a package.

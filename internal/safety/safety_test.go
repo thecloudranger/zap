@@ -8,6 +8,7 @@ import (
 
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/policy"
+	"github.com/thecloudranger/zap/internal/procs"
 )
 
 func TestGates(t *testing.T) {
@@ -58,4 +59,20 @@ func TestGates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNotInUse(t *testing.T) {
+	a := model.Assessment{Worktree: model.Worktree{Path: "/r/w"}}
+	eval := func(p *Procs, prunable bool) model.CheckResult {
+		a := a
+		a.Prunable = prunable
+		return NotInUse{}.Eval(&Subject{A: a, Procs: p})
+	}
+	assert.Equal(t, model.Skipped, eval(nil, false).Outcome)
+	assert.Equal(t, model.Pass, eval(&Procs{List: []procs.Proc{{PID: 1, Cwd: "/r/w2"}}}, false).Outcome)
+	r := eval(&Procs{List: []procs.Proc{{PID: 42, Command: "claude", Cwd: "/r/w/src"}}}, false)
+	assert.Equal(t, model.Fail, r.Outcome)
+	assert.Equal(t, "in use by claude (pid 42)", r.Detail)
+	assert.Equal(t, model.Fail, eval(&Procs{Err: procs.ErrUnavailable}, false).Outcome, "fail closed")
+	assert.Equal(t, model.Skipped, eval(&Procs{Err: procs.ErrUnavailable}, true).Outcome, "nothing to protect when the folder is gone")
 }

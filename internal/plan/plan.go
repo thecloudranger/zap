@@ -12,6 +12,7 @@ import (
 	"github.com/thecloudranger/zap/internal/inspect"
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/policy"
+	"github.com/thecloudranger/zap/internal/procs"
 	"github.com/thecloudranger/zap/internal/safety"
 	"github.com/thecloudranger/zap/internal/sizer"
 	"github.com/thecloudranger/zap/internal/verdict"
@@ -63,6 +64,8 @@ type Options struct {
 	Now    time.Time
 	Cwd    string
 	Gates  []safety.Gate // nil means safety.Default()
+	// Procs lists running processes; nil means procs.List.
+	Procs func(context.Context) ([]procs.Proc, error)
 }
 
 // Build inspects the repository containing dir and plans its cleanup.
@@ -82,6 +85,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 	if target == "" {
 		target = pol.Target
 	}
+	running := snapshot(ctx, opt.Procs) // before zap starts git processes of its own
 	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch, Sizer: opt.Sizer})
 	if err != nil {
 		return Plan{}, err
@@ -99,14 +103,23 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 			p.ActiveCount++
 			continue
 		}
-		p.Items = append(p.Items, planItem(ctx, git, rep, a, pol, gates, found, opt))
+		p.Items = append(p.Items, planItem(ctx, git, rep, a, pol, gates, found, opt, running))
 	}
 	return p, nil
 }
 
-func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options) Item {
+// snapshot lists running processes once for a whole plan.
+func snapshot(ctx context.Context, list func(context.Context) ([]procs.Proc, error)) *safety.Procs {
+	if list == nil {
+		list = procs.List
+	}
+	ps, err := list(ctx)
+	return &safety.Procs{List: ps, Err: err}
+}
+
+func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options, running *safety.Procs) Item {
 	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason, Size: a.Facts.Size}
-	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd}, gates)
+	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd, Procs: running}, gates)
 	it.Gates, it.Eligible = results, ok
 	switch {
 	case !ok:

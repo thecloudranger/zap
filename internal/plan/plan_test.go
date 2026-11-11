@@ -2,6 +2,7 @@ package plan
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -189,4 +190,19 @@ func TestDefaultMinAgeKeepsFreshWorktrees(t *testing.T) {
 	zap, keep := p.Counts()
 	assert.Zero(t, zap)
 	assert.Equal(t, len(p.Items), keep)
+}
+
+func TestWorktreeInUseIsKept(t *testing.T) {
+	f := newFixture(t)
+	optIn(t, f.repo, `min_age = "0"`)
+	// Something else (not zap) is working inside the merged worktree.
+	pid := testkit.Git(t, f.merged, "-c", "alias.bg=!sleep 30 >/dev/null 2>&1 & echo $!", "bg")
+	t.Cleanup(func() { _ = exec.Command("kill", pid).Run() })
+
+	p, err := Build(t.Context(), gitx.Exec{}, f.repo, Options{Now: time.Now()})
+	require.NoError(t, err)
+	it := byPath(p)[f.merged]
+	assert.Equal(t, Keep, it.Action)
+	assert.Contains(t, it.Refusal, "in use by sleep (pid "+pid+")")
+	assert.Equal(t, Remove, byPath(p)[f.empty].Action, "other worktrees are unaffected")
 }

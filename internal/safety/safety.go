@@ -10,6 +10,7 @@ import (
 
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/policy"
+	"github.com/thecloudranger/zap/internal/procs"
 )
 
 // Subject is what a gate looks at.
@@ -19,6 +20,13 @@ type Subject struct {
 	Policy policy.Repo
 	Now    time.Time
 	Cwd    string // zap's working directory; a worktree containing it is kept
+	Procs  *Procs // running processes; nil means not checked
+}
+
+// Procs is a snapshot of running processes' working directories.
+type Procs struct {
+	List []procs.Proc
+	Err  error // the snapshot could not be taken
 }
 
 // Gate is one safety rule.
@@ -29,7 +37,7 @@ type Gate interface {
 
 // Default is the gate list used by clean.
 func Default() []Gate {
-	return []Gate{NotMain{}, Unprotected{}, Unlocked{}, Inspected{}, Clean{}, OldEnough{}, NotCwd{}}
+	return []Gate{NotMain{}, Unprotected{}, Unlocked{}, Inspected{}, Clean{}, OldEnough{}, NotCwd{}, NotInUse{}}
 }
 
 // Evaluate runs every gate. ok is true only if all pass.
@@ -178,4 +186,32 @@ func (NotCwd) Eval(s *Subject) model.CheckResult {
 		return fail("zap is running inside it")
 	}
 	return pass("zap is not running inside it")
+}
+
+// NotInUse refuses a worktree that another process (a shell, editor or agent) is
+// working in. If processes cannot be listed, it refuses: doubt means keep.
+type NotInUse struct{}
+
+// Name implements Gate.
+func (NotInUse) Name() string { return "not-in-use" }
+
+// Eval implements Gate.
+func (NotInUse) Eval(s *Subject) model.CheckResult {
+	switch {
+	case s.Procs == nil:
+		return model.CheckResult{Outcome: model.Skipped, Detail: "processes not checked"}
+	case s.A.Prunable:
+		return model.CheckResult{Outcome: model.Skipped, Detail: "folder is gone"}
+	case s.Procs.Err != nil:
+		return fail("cannot check for processes using it: %v", s.Procs.Err)
+	}
+	in := procs.Inside(s.Procs.List, s.A.Path)
+	if len(in) == 0 {
+		return pass("no process is working in it")
+	}
+	names := make([]string, 0, len(in))
+	for _, p := range in {
+		names = append(names, fmt.Sprintf("%s (pid %d)", p.Command, p.PID))
+	}
+	return fail("in use by %s", strings.Join(names, ", "))
 }

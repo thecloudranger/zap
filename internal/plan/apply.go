@@ -9,6 +9,7 @@ import (
 	"github.com/thecloudranger/zap/internal/inspect"
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/oplog"
+	"github.com/thecloudranger/zap/internal/procs"
 	"github.com/thecloudranger/zap/internal/safety"
 )
 
@@ -37,7 +38,8 @@ type ApplyOptions struct {
 	Now   func() time.Time
 	Cwd   string
 	Log   oplog.Log
-	Gates []safety.Gate // nil means safety.Default()
+	Gates []safety.Gate                               // nil means safety.Default()
+	Procs func(context.Context) ([]procs.Proc, error) // nil means procs.List
 }
 
 // RunID names a clean run; it is also a path component of the backup refs.
@@ -56,6 +58,7 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 	if run == "" {
 		run = RunID(opt.Now())
 	}
+	running := snapshot(ctx, opt.Procs)
 	fresh, err := inspect.Repo(ctx, git, p.Repo, inspect.Options{Target: p.Target.Name})
 	if err != nil {
 		return nil, fmt.Errorf("plan: recheck: %w", err)
@@ -77,7 +80,7 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 		if err := ctx.Err(); err != nil {
 			return results, err
 		}
-		r := applyItem(ctx, git, p, it, current, gates, run, opt)
+		r := applyItem(ctx, git, p, it, current, gates, run, opt, running)
 		results = append(results, r)
 		entry := oplog.Entry{
 			Run: run, Time: opt.Now(), Repo: p.Repo, Path: it.Path, Branch: it.Branch, Head: it.Head,
@@ -91,14 +94,14 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 	return results, nil
 }
 
-func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current map[string]model.Assessment, gates []safety.Gate, run string, opt ApplyOptions) Result {
+func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current map[string]model.Assessment, gates []safety.Gate, run string, opt ApplyOptions, running *safety.Procs) Result {
 	r := Result{Repo: p.Repo, Path: it.Path, Branch: it.Branch}
 	if why := changed(it, current); why != "" {
 		r.Outcome, r.Detail = Skipped, "changed since the plan: "+why
 		return r
 	}
 	a := current[it.Path]
-	if _, ok := safety.Evaluate(&safety.Subject{A: a, Target: p.Target, Policy: p.Policy, Now: opt.Now(), Cwd: opt.Cwd}, gates); !ok {
+	if _, ok := safety.Evaluate(&safety.Subject{A: a, Target: p.Target, Policy: p.Policy, Now: opt.Now(), Cwd: opt.Cwd, Procs: running}, gates); !ok {
 		r.Outcome, r.Detail = Skipped, "a safety gate no longer passes"
 		return r
 	}
