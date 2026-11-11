@@ -30,9 +30,8 @@ archives:
 checksum:
   name_template: checksums.txt
 
-# Release notes come from CHANGELOG.md (see .github/workflows/release.yml).
-changelog:
-  disable: true
+# Release notes come from CHANGELOG.md through --release-notes (see the release workflow).
+# The changelog pipe must stay enabled: it is what reads that file.
 
 homebrew_casks:
   - name: zap
