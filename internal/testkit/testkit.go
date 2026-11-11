@@ -89,3 +89,43 @@ func AddWorktree(t testing.TB, repo, rel, branch string) string {
 	Git(t, repo, "worktree", "add", "-q", "-b", branch, p)
 	return p
 }
+
+// MergeFF fast-forwards main in repo to branch.
+func MergeFF(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "merge", "-q", "--ff-only", branch)
+}
+
+// MergeCommit merges branch into main in repo with a merge commit.
+func MergeCommit(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "merge", "-q", "--no-ff", "-m", "Merge "+branch, branch)
+}
+
+// Dirty adds an untracked file to the worktree.
+func Dirty(t testing.TB, wt string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(wt, "scratch.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// AddOrigin creates a bare "remote" next to repo, pushes main and sets origin/HEAD,
+// so the repo looks like a GitHub clone. It returns the bare repo path.
+func AddOrigin(t testing.TB, repo string) string {
+	t.Helper()
+	bare := filepath.Join(filepath.Dir(repo), "origin.git")
+	Git(t, filepath.Dir(repo), "init", "-q", "--bare", "-b", "main", bare)
+	Git(t, repo, "remote", "add", "origin", bare)
+	Git(t, repo, "push", "-q", "-u", "origin", "main")
+	Git(t, repo, "remote", "set-head", "origin", "main")
+	return bare
+}
+
+// MergeOnRemote fast-forwards origin's main to branch (like merging a PR on GitHub)
+// and fetches, leaving the local main behind.
+func MergeOnRemote(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "push", "-q", "origin", branch+":main")
+	Git(t, repo, "fetch", "-q", "origin")
+}
