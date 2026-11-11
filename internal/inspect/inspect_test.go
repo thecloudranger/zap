@@ -46,6 +46,8 @@ func TestRepoScenarios(t *testing.T) {
 	detached := testkit.TempDir(t) + "/codex-1"
 	testkit.Git(t, repo, "worktree", "add", "-q", "--detach", detached)
 
+	fresh := testkit.AddWorktree(t, repo, ".claude/worktrees/fresh", "worktree-fresh")
+
 	rep, err := Repo(t.Context(), gitx.Exec{}, open, Options{})
 	require.NoError(t, err)
 	assert.Equal(t, repo, rep.Root)
@@ -64,7 +66,8 @@ func TestRepoScenarios(t *testing.T) {
 		reverted: model.StatusMerged,
 		open:     model.StatusActive,
 		gone:     model.StatusMissing,
-		detached: model.StatusMerged, // no commits of its own: tip is on main
+		detached: model.StatusEmpty,
+		fresh:    model.StatusEmpty,
 	}
 	require.Len(t, got, len(want))
 	for path, status := range want {

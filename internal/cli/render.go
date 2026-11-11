@@ -50,7 +50,7 @@ func summaryLine(as []model.Assessment) string {
 		counts[a.Verdict.Status]++
 	}
 	var parts []string
-	for _, s := range []model.Status{model.StatusMerged, model.StatusMissing, model.StatusActive} {
+	for _, s := range []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing, model.StatusActive} {
 		if counts[s] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[s], s))
 		}

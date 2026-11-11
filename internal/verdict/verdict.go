@@ -43,6 +43,7 @@ type Rule struct {
 func Default() []Rule {
 	return []Rule{
 		{Missing{}, model.StatusMissing},
+		{Empty{}, model.StatusEmpty},
 		{Ancestor{}, model.StatusMerged},
 		{EmptyDiff{}, model.StatusMerged},
 	}
@@ -99,6 +100,43 @@ func (Missing) Eval(_ context.Context, s *Subject) model.CheckResult {
 		return model.CheckResult{Outcome: model.Match, Detail: "folder is gone: " + s.WT.PruneReason}
 	}
 	return model.CheckResult{Outcome: model.NoMatch, Detail: "folder exists"}
+}
+
+// Empty matches when the worktree's ref never moved since it was created: a fresh
+// worktree whose tip is on the target only because nothing was committed yet.
+// Without a reflog it is skipped, so the worktree falls through to the merge checks.
+type Empty struct{}
+
+// Name implements Check.
+func (Empty) Name() string { return "empty" }
+
+// Eval implements Check.
+func (Empty) Eval(ctx context.Context, s *Subject) model.CheckResult {
+	dir, ref := s.Repo.Root, "refs/heads/"+s.WT.Branch
+	if s.WT.Branch == "" {
+		if s.WT.Prunable {
+			return model.CheckResult{Outcome: model.Skipped, Detail: "detached and folder is gone"}
+		}
+		dir, ref = s.WT.Path, "HEAD"
+	}
+	shas, err := gitx.ReflogSHAs(ctx, s.Git, dir, ref)
+	if err != nil {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "no reflog: " + firstLine(err.Error())}
+	}
+	if len(shas) == 0 {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "no reflog"}
+	}
+	for _, sha := range shas {
+		if sha != s.WT.Head {
+			return model.CheckResult{Outcome: model.NoMatch, Detail: fmt.Sprintf("%s moved %d time(s) since creation", shortRef(ref), len(shas)-1)}
+		}
+	}
+	return model.CheckResult{Outcome: model.Match, Detail: fmt.Sprintf("no commits of its own since it was created at %s", short(s.WT.Head))}
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
 }
 
 // Ancestor matches when the tip is reachable from a target ref: fast-forward and

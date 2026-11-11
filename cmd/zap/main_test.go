@@ -148,6 +148,11 @@ func TestScanStatuses(t *testing.T) {
 	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+merged`, r.stdout)
 	assert.Regexp(t, `\.worktrees/wip\s+wip\s+active\s+\S+\s+\S+\s+dirty\(1\)`, r.stdout)
 	assert.Contains(t, r.stdout, "1 merged · 1 active")
+
+	testkit.AddWorktree(t, repo, ".claude/worktrees/fresh", "worktree-fresh")
+	r = run(t, repo, "scan")
+	assert.Regexp(t, `\.claude/worktrees/fresh\s+worktree-fresh\s+empty`, r.stdout)
+	assert.Contains(t, r.stdout, "1 merged · 1 empty · 1 active")
 }
 
 func TestExplain(t *testing.T) {
@@ -171,7 +176,7 @@ func TestExplain(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
 	assert.Equal(t, "merged", string(env.Data.Worktree.Verdict.Status))
-	assert.Len(t, env.Data.Worktree.Verdict.Checks, 3)
+	assert.Len(t, env.Data.Worktree.Verdict.Checks, 4)
 }
 
 func TestExplainMissingAndErrors(t *testing.T) {

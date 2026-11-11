@@ -49,6 +49,7 @@ type Status string
 const (
 	StatusMain    Status = "main"    // the repository's main worktree; never a candidate
 	StatusMissing Status = "missing" // registered but its folder is gone
+	StatusEmpty   Status = "empty"   // never got a commit of its own
 	StatusMerged  Status = "merged"  // its work is already in the target
 	StatusActive  Status = "active"  // anything else
 )

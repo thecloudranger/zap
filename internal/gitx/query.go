@@ -185,3 +185,13 @@ func AdminDir(commonDir, wtPath string) (string, error) {
 	}
 	return "", fmt.Errorf("gitx: no admin dir for worktree %s", wtPath)
 }
+
+// ReflogSHAs returns the commits a ref's reflog has pointed at, newest first. An empty
+// result means the reflog is missing (reflogs disabled or expired).
+func ReflogSHAs(ctx context.Context, r Runner, dir, ref string) ([]string, error) {
+	out, err := r.Run(ctx, dir, "reflog", "show", "--format=%H", ref, "--")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
