@@ -14,6 +14,7 @@ const (
 	ExitOK          = 0
 	ExitFailure     = 1
 	ExitUsage       = 2
+	ExitRefused     = 4 // zap refused to act (disclaimer not accepted, confirmation missing)
 	ExitInterrupted = 130
 )
 

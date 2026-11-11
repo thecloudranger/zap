@@ -45,9 +45,15 @@ type result struct {
 
 func run(t *testing.T, dir string, args ...string) result {
 	t.Helper()
+	return runHome(t, testkit.TempDir(t), dir, args...)
+}
+
+// runHome runs zap with a given HOME, so config and history persist across calls.
+func runHome(t *testing.T, home, dir string, args ...string) result {
+	t.Helper()
 	cmd := exec.Command(zapBin, args...)
 	cmd.Dir = dir
-	cmd.Env = testkit.Env(testkit.TempDir(t))
+	cmd.Env = testkit.Env(home)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
@@ -200,4 +206,88 @@ func TestExplainMissingAndErrors(t *testing.T) {
 	assert.Equal(t, "no_target", env.Error.Code)
 
 	assert.Equal(t, cli.ExitUsage, run(t, repo, "explain").code)
+}
+
+func TestCleanNonInteractive(t *testing.T) {
+	home := testkit.TempDir(t)
+	repo := testkit.NewRepo(t)
+	wt := testkit.AddWorktree(t, repo, ".claude/worktrees/done", "worktree-done")
+	testkit.Commit(t, wt, "d.txt", "d\n", "done")
+	testkit.MergeFF(t, repo, "worktree-done")
+	zap := func(args ...string) result { return runHome(t, home, repo, args...) }
+
+	r := zap("clean")
+	assert.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "not opted in")
+	assert.DirExists(t, wt)
+
+	require.Equal(t, 0, zap("init").code)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".zap"), []byte(`min_age = "0"`), 0o644))
+
+	r = zap("clean", "--dry-run")
+	assert.Equal(t, 0, r.code, r.stderr)
+	assert.Regexp(t, `✓\s+\.claude/worktrees/done\s+worktree-done\s+merged\s+remove worktree, delete branch`, r.stdout)
+	assert.Contains(t, r.stdout, "Dry run: nothing was changed.")
+	assert.DirExists(t, wt)
+
+	assert.Equal(t, cli.ExitUsage, zap("clean", "--dry-run", "--yes").code)
+
+	r = zap("clean", "--yes")
+	assert.Equal(t, cli.ExitRefused, r.code, "disclaimer must be accepted on a terminal first")
+	assert.Contains(t, r.stderr, "disclaimer")
+	assert.DirExists(t, wt)
+
+	acceptDisclaimer(t, home)
+	r = zap("clean")
+	assert.Equal(t, cli.ExitRefused, r.code)
+	assert.Contains(t, r.stderr, "pass --yes")
+	assert.DirExists(t, wt)
+
+	r = zap("clean", "--yes", "--json")
+	require.Equal(t, 0, r.code, r.stdout+r.stderr)
+	var env struct {
+		cli.Envelope
+		Data cli.CleanResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	require.Len(t, env.Data.Results, 1)
+	assert.Equal(t, "zapped", env.Data.Results[0].Outcome)
+	assert.True(t, env.Data.Results[0].BranchDeleted)
+	assert.NoDirExists(t, wt)
+	backup := env.Data.Results[0].BackupRef
+	assert.Equal(t, env.Data.Plan.Items[0].Head, testkit.Git(t, repo, "rev-parse", backup), "backup ref holds the old tip")
+
+	r = zap("history", "--json")
+	require.Equal(t, 0, r.code)
+	var hist struct {
+		Data cli.HistoryResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &hist))
+	require.Len(t, hist.Data.Entries, 1)
+	assert.Equal(t, wt, hist.Data.Entries[0].Path)
+
+	r = zap("clean", "--yes")
+	assert.Equal(t, 0, r.code)
+	assert.Contains(t, r.stdout, "Nothing to zap")
+}
+
+func TestCleanJSONErrors(t *testing.T) {
+	home := testkit.TempDir(t)
+	repo := testkit.NewRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".zap"), []byte(`min_agee = "1d"`), 0o644))
+
+	r := runHome(t, home, repo, "clean", "--json")
+	assert.Equal(t, cli.ExitFailure, r.code)
+	var env cli.Envelope
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.Equal(t, "invalid_zap", env.Error.Code)
+	assert.Contains(t, env.Error.Message, "min_agee")
+}
+
+func acceptDisclaimer(t *testing.T, home string) {
+	t.Helper()
+	dir := filepath.Join(home, ".config", "zap")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.toml"),
+		[]byte("[disclaimer]\nversion = 1\naccepted_at = 2026-11-11T00:00:00Z\n"), 0o644))
 }

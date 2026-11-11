@@ -24,6 +24,11 @@ var allowed = map[string][]string{
 	"internal/gitx":    {"internal/model"},
 	"internal/verdict": {"internal/model", "internal/gitx"},
 	"internal/inspect": {"internal/model", "internal/gitx", "internal/verdict"},
+	"internal/policy":  {"internal/model"},
+	"internal/safety":  {"internal/model", "internal/policy"},
+	"internal/oplog":   {},
+	"internal/plan": {"internal/model", "internal/gitx", "internal/inspect", "internal/verdict",
+		"internal/policy", "internal/safety", "internal/oplog"},
 }
 
 // importers restricts who may import a package.
