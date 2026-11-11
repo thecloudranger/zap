@@ -39,3 +39,12 @@ func TestTildifyAndRel(t *testing.T) {
 	assert.Equal(t, ".claude/worktrees/a", relTo("/r/.claude/worktrees/a", "/r", "/Users/u"))
 	assert.Equal(t, "~/.codex/worktrees/1", relTo("/Users/u/.codex/worktrees/1", "/r", "/Users/u"))
 }
+
+func TestHumanBytes(t *testing.T) {
+	for n, want := range map[int64]string{
+		0: "0 B", 999: "999 B", 1000: "1.0 KB", 1_234_567: "1.2 MB", 45_000_000: "45 MB",
+		4_200_000_000: "4.2 GB", 1_500_000_000_000: "1.5 TB",
+	} {
+		assert.Equal(t, want, humanBytes(n), "%d", n)
+	}
+}

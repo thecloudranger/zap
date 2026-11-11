@@ -14,6 +14,7 @@ import (
 	"github.com/thecloudranger/zap/internal/gitx"
 	"github.com/thecloudranger/zap/internal/inspect"
 	"github.com/thecloudranger/zap/internal/model"
+	"github.com/thecloudranger/zap/internal/sizer"
 )
 
 // ScanResult is the `data` payload of `zap scan --json`.
@@ -27,8 +28,8 @@ type ScanResult struct {
 }
 
 type scanFlags struct {
-	asJSON, fetch, all bool
-	target             string
+	asJSON, fetch, all, noSize bool
+	target                     string
 }
 
 func newScanCmd(d Deps) *cobra.Command {
@@ -63,6 +64,7 @@ func newScanCmd(d Deps) *cobra.Command {
 	f.StringVar(&fl.target, "target", "", "branch that counts as merged-into (default: origin/HEAD, main, master)")
 	f.BoolVar(&fl.fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
 	f.BoolVarP(&fl.all, "all", "a", false, "scan every repository under the scan roots")
+	f.BoolVar(&fl.noSize, "no-size", false, "skip measuring disk use (faster)")
 	return cmd
 }
 
@@ -78,6 +80,9 @@ func (r ScanResult) allWarnings() []string {
 
 func scan(cmd *cobra.Command, d Deps, args []string, fl scanFlags) (ScanResult, error) {
 	opt := inspect.Options{Target: fl.target, Fetch: fl.fetch}
+	if !fl.noSize {
+		opt.Sizer = sizer.NewCounter()
+	}
 	if !fl.all {
 		dir, err := targetDir(d, args)
 		if err != nil {

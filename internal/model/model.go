@@ -89,6 +89,16 @@ type Facts struct {
 	Created      time.Time `json:"created,omitzero"`
 	LastCommit   time.Time `json:"lastCommit,omitzero"`
 	LastActivity time.Time `json:"lastActivity,omitzero"`
+	Size         *Usage    `json:"size,omitempty"` // nil when not measured
+}
+
+// Usage is disk use in bytes. Total is what removing the folder would free: files with a
+// single link. Deps is the part of Total inside dependency and build folders. Shared is
+// hard-linked data (e.g. a pnpm store) that stays on disk while another link remains.
+type Usage struct {
+	Total  int64 `json:"total"`
+	Deps   int64 `json:"deps"`
+	Shared int64 `json:"shared"`
 }
 
 // Assessment is a worktree with its facts and verdict.

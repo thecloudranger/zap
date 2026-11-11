@@ -28,6 +28,7 @@ type Result struct {
 	Detail        string `json:"detail,omitempty"`
 	BackupRef     string `json:"backupRef,omitempty"`
 	BranchDeleted bool   `json:"branchDeleted"`
+	Freed         int64  `json:"freed"` // measured size of the removed worktree, 0 if unknown
 }
 
 // ApplyOptions control Apply.
@@ -124,6 +125,9 @@ func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current ma
 		return r
 	}
 	r.Outcome = Zapped
+	if it.Size != nil && it.Action == Remove {
+		r.Freed = it.Size.Total
+	}
 
 	if it.DeleteBranch && it.Branch != "" {
 		if err := gitx.DeleteBranch(ctx, git, p.Repo, it.Branch); err != nil {

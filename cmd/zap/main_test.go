@@ -75,7 +75,8 @@ func TestScanTable(t *testing.T) {
 	r := run(t, repo, "scan")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "2 linked worktrees")
-	assert.Regexp(t, `WORKTREE\s+BRANCH\s+AGENT\s+STATUS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
+	assert.Regexp(t, `WORKTREE\s+BRANCH\s+AGENT\s+STATUS\s+SIZE\s+DEPS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
+	assert.Regexp(t, `\d+(\.\d)? KB`, r.stdout, "worktrees are measured")
 	assert.Regexp(t, `\.claude/worktrees/feat-a\s+worktree-feat-a\s+claude\s`, r.stdout)
 	assert.Contains(t, r.stdout, ".claude/worktrees/feat-a")
 	assert.Contains(t, r.stdout, "worktree-feat-a")
@@ -157,7 +158,11 @@ func TestScanStatuses(t *testing.T) {
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "target main")
 	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+claude\s+merged`, r.stdout)
-	assert.Regexp(t, `\.worktrees/wip\s+wip\s+-\s+active\s+\S+\s+\S+\s+dirty\(1\)`, r.stdout)
+	assert.Regexp(t, `\.worktrees/wip\s+wip\s+-\s+active\s+(\S+ \S+\s+){2}\S+\s+\S+\s+dirty\(1\)`, r.stdout)
+	assert.Regexp(t, `1 merged · 1 active  ·  \S+ \S+, \S+ \S+ merged or empty`, r.stdout)
+
+	r = run(t, repo, "scan", "--no-size")
+	assert.Regexp(t, `merged\s+-\s+-\s`, r.stdout, "--no-size leaves sizes blank")
 	assert.Contains(t, r.stdout, "1 merged · 1 active")
 
 	testkit.AddWorktree(t, repo, ".claude/worktrees/fresh", "worktree-fresh")
@@ -231,8 +236,8 @@ func TestCleanNonInteractive(t *testing.T) {
 
 	r = zap("clean", "--dry-run")
 	assert.Equal(t, 0, r.code, r.stderr)
-	assert.Regexp(t, `✓\s+\.claude/worktrees/done\s+worktree-done\s+merged\s+remove worktree, delete branch`, r.stdout)
-	assert.Contains(t, r.stdout, "Dry run: nothing was changed.")
+	assert.Regexp(t, `✓\s+\.claude/worktrees/done\s+worktree-done\s+merged\s+\S+ \S+\s+remove worktree, delete branch`, r.stdout)
+	assert.Contains(t, r.stdout, "Dry run: nothing was changed. Zapping would free about")
 	assert.DirExists(t, wt)
 
 	assert.Equal(t, cli.ExitUsage, zap("clean", "--dry-run", "--yes").code)
@@ -258,6 +263,8 @@ func TestCleanNonInteractive(t *testing.T) {
 	require.Len(t, env.Data.Results, 1)
 	assert.Equal(t, "zapped", env.Data.Results[0].Outcome)
 	assert.True(t, env.Data.Results[0].BranchDeleted)
+	assert.Positive(t, env.Data.Results[0].Freed)
+	require.NotNil(t, env.Data.Plans[0].Items[0].Size)
 	assert.NoDirExists(t, wt)
 	backup := env.Data.Results[0].BackupRef
 	assert.Equal(t, env.Data.Plans[0].Items[0].Head, testkit.Git(t, repo, "rev-parse", backup), "backup ref holds the old tip")

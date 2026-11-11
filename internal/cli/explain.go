@@ -13,6 +13,7 @@ import (
 
 	"github.com/thecloudranger/zap/internal/inspect"
 	"github.com/thecloudranger/zap/internal/model"
+	"github.com/thecloudranger/zap/internal/sizer"
 )
 
 // ErrNotWorktree is returned when explain's PATH is not a worktree of the repository.
@@ -74,7 +75,7 @@ func explain(cmd *cobra.Command, d Deps, arg, target string, fetch bool) (Explai
 			return ExplainResult{}, fmt.Errorf("cli: working directory: %w", err)
 		}
 	}
-	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target, AllRules: true, Fetch: fetch})
+	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target, AllRules: true, Fetch: fetch, Sizer: sizer.NewCounter()})
 	if err != nil {
 		return ExplainResult{}, err
 	}
@@ -110,6 +111,12 @@ func renderExplain(w io.Writer, res ExplainResult, home string, now time.Time) e
 	_, _ = fmt.Fprintln(w, "\n  facts")
 	_, _ = fmt.Fprintf(w, "    dirty          %s\n", yesno(f.Dirty, fmt.Sprintf("yes, %d changed path%s", f.Changes, plural(f.Changes))))
 	_, _ = fmt.Fprintf(w, "    locked         %s\n", yesno(a.Locked, "yes "+a.LockReason))
+	if u := f.Size; u != nil {
+		_, _ = fmt.Fprintf(w, "    size           %s freed if removed (%s of it dependencies and build output)\n", humanBytes(u.Total), humanBytes(u.Deps))
+		if u.Shared > 0 {
+			_, _ = fmt.Fprintf(w, "    shared         %s hard-linked with other folders, not freed\n", humanBytes(u.Shared))
+		}
+	}
 	_, _ = fmt.Fprintf(w, "    created        %s\n", stamp(now, f.Created))
 	_, _ = fmt.Fprintf(w, "    last commit    %s\n", stamp(now, f.LastCommit))
 	_, _ = fmt.Fprintf(w, "    last activity  %s\n", stamp(now, f.LastActivity))

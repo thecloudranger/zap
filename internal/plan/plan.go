@@ -13,6 +13,7 @@ import (
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/policy"
 	"github.com/thecloudranger/zap/internal/safety"
+	"github.com/thecloudranger/zap/internal/sizer"
 	"github.com/thecloudranger/zap/internal/verdict"
 )
 
@@ -39,6 +40,7 @@ type Item struct {
 	Refusal      string              `json:"refusal,omitempty"` // why it is kept
 	Eligible     bool                `json:"eligible"`          // passed every safety gate
 	Gates        []model.CheckResult `json:"gates"`
+	Size         *model.Usage        `json:"size,omitempty"`
 }
 
 // Plan is everything clean would do in one repository.
@@ -57,6 +59,7 @@ type Plan struct {
 type Options struct {
 	Target string // overrides .zap target
 	Fetch  bool   // fetch remotes before deciding
+	Sizer  *sizer.Counter
 	Now    time.Time
 	Cwd    string
 	Gates  []safety.Gate // nil means safety.Default()
@@ -79,7 +82,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 	if target == "" {
 		target = pol.Target
 	}
-	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch})
+	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch, Sizer: opt.Sizer})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -102,7 +105,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 }
 
 func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options) Item {
-	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason}
+	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason, Size: a.Facts.Size}
 	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd}, gates)
 	it.Gates, it.Eligible = results, ok
 	switch {
@@ -146,6 +149,17 @@ func branchDecision(ctx context.Context, git gitx.Runner, rep model.RepoReport, 
 		return true, ""
 	}
 	return false, fmt.Sprintf("kept: branch has commits not in %s", rep.Target.Name)
+}
+
+// Reclaimable is the measured disk use of the worktrees the plan would remove.
+func (p Plan) Reclaimable() int64 {
+	var n int64
+	for _, it := range p.Items {
+		if it.Action != Keep && it.Size != nil {
+			n += it.Size.Total
+		}
+	}
+	return n
 }
 
 // Counts summarizes a plan.

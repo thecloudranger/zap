@@ -14,6 +14,7 @@ import (
 	"github.com/thecloudranger/zap/internal/oplog"
 	"github.com/thecloudranger/zap/internal/plan"
 	"github.com/thecloudranger/zap/internal/policy"
+	"github.com/thecloudranger/zap/internal/sizer"
 )
 
 // CleanResult is the `data` payload of `zap clean --json`.
@@ -100,7 +101,7 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		}
 		renderPlans(out, plans, warnings, fl.all, d.Home)
 		if fl.dryRun && toZap > 0 {
-			_, _ = fmt.Fprintln(out, "\nDry run: nothing was changed.")
+			_, _ = fmt.Fprintf(out, "\nDry run: nothing was changed. Zapping would free about %s.\n", humanBytes(reclaimable(plans)))
 		}
 		return nil
 	}
@@ -124,6 +125,7 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 	}
 
 	results := []plan.Result{}
+	freeBefore, freeErr := sizer.Free(plans[0].Repo)
 	run := plan.RunID(d.Now()) // one run across all repositories, so one undo restores it
 	for _, p := range plans {
 		if n, _ := p.Counts(); n == 0 || !p.OptedIn {
@@ -142,6 +144,8 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		}
 	} else {
 		renderResults(out, results, d.Home)
+		freeAfter, err := sizer.Free(plans[0].Repo)
+		renderFreed(out, results, freeBefore, freeAfter, freeErr == nil && err == nil && !fl.all)
 	}
 	for _, r := range results {
 		if r.Outcome == plan.Failed {
@@ -155,7 +159,7 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 // under the scan roots that has worktrees. A repository that fails to plan becomes a
 // warning in --all mode.
 func buildPlans(cmd *cobra.Command, d Deps, args []string, fl cleanFlags, cwd string) ([]plan.Plan, []string, error) {
-	opt := plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd}
+	opt := plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd, Sizer: sizer.NewCounter()}
 	if !fl.all {
 		dir, err := targetDir(d, args)
 		if err != nil {
@@ -206,6 +210,36 @@ func buildPlans(cmd *cobra.Command, d Deps, args []string, fl cleanFlags, cwd st
 		}
 	}
 	return plans, warnings, nil
+}
+
+func reclaimable(plans []plan.Plan) int64 {
+	var n int64
+	for _, p := range plans {
+		if p.OptedIn {
+			n += p.Reclaimable()
+		}
+	}
+	return n
+}
+
+// renderFreed reports space freed: the measured size of what was removed and, when all
+// of it was on one disk, the change in that disk's free space.
+func renderFreed(w io.Writer, results []plan.Result, before, after uint64, oneDisk bool) {
+	var freed int64
+	for _, r := range results {
+		freed += r.Freed
+	}
+	if freed == 0 {
+		return
+	}
+	line := fmt.Sprintf("Freed about %s", humanBytes(freed))
+	if oneDisk {
+		line += "  ·  free space " + humanBytes(int64(after))
+		if after > before { // other processes write too, so the change can be noise
+			line += " (+" + humanBytes(int64(after-before)) + ")"
+		}
+	}
+	_, _ = fmt.Fprintln(w, line+".")
 }
 
 func prefixed(prefix string, ws []string) []string {
@@ -327,17 +361,25 @@ func renderPlan(w io.Writer, p plan.Plan, home string) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "  \tWORKTREE\tBRANCH\tSTATUS\tWHAT")
+	_, _ = fmt.Fprintln(tw, "  \tWORKTREE\tBRANCH\tSTATUS\tSIZE\tWHAT")
 	for _, it := range p.Items {
 		mark, what := "✓", describe(it)
+		size := "-"
+		if it.Size != nil {
+			size = humanBytes(it.Size.Total)
+		}
 		if it.Action == plan.Keep {
 			mark, what = "·", "keep: "+it.Refusal
 		}
-		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\n", mark, relTo(it.Path, p.Repo, home), dash(it.Branch), it.Status, what)
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\n", mark, relTo(it.Path, p.Repo, home), dash(it.Branch), it.Status, size, what)
 	}
 	_ = tw.Flush()
 	toZap, keep := p.Counts()
-	_, _ = fmt.Fprintf(w, "\n%d to zap · %d kept · %d active\n", toZap, keep, p.ActiveCount)
+	line := fmt.Sprintf("\n%d to zap · %d kept · %d active", toZap, keep, p.ActiveCount)
+	if n := p.Reclaimable(); n > 0 {
+		line += fmt.Sprintf("  ·  frees about %s", humanBytes(n))
+	}
+	_, _ = fmt.Fprintln(w, line)
 }
 
 func describe(it plan.Item) string {

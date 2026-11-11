@@ -82,6 +82,7 @@ func TestCleanDisclaimerAndConfirm(t *testing.T) {
 	assert.NotContains(t, out, "Type \"zap\"", "disclaimer is asked only once")
 	assert.Contains(t, out, "✓ zapped")
 	assert.Contains(t, out, "Zapped 1 worktree.")
+	assert.Regexp(t, `Freed about \S+ \S+  ·  free space`, out)
 	assert.NoDirExists(t, wt)
 
 	out, code = session{t, home, repo, ""}.run("history")

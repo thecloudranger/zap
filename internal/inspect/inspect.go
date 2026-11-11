@@ -12,6 +12,7 @@ import (
 	"github.com/thecloudranger/zap/internal/agent"
 	"github.com/thecloudranger/zap/internal/gitx"
 	"github.com/thecloudranger/zap/internal/model"
+	"github.com/thecloudranger/zap/internal/sizer"
 	"github.com/thecloudranger/zap/internal/verdict"
 )
 
@@ -20,6 +21,7 @@ type Options struct {
 	Target   string         // target branch override; empty resolves the default
 	AllRules bool           // run every check (explain) instead of stopping at the first match
 	Fetch    bool           // run `git fetch --all --prune` first
+	Sizer    *sizer.Counter // measure linked worktrees' disk use; nil skips it
 	Rules    []verdict.Rule // nil means verdict.Default()
 }
 
@@ -68,6 +70,13 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 			a := model.Assessment{Worktree: wt, Agent: agent.Detect(wt.Path), Verdict: verdict.Evaluate(gctx, s, rules, opt.AllRules)}
 			if !wt.Main { // the main worktree is never a candidate; its facts are not needed
 				a.Facts, a.Errors = facts(gctx, git, repo.CommonDir, wt)
+				if opt.Sizer != nil && !wt.Prunable && !wt.Bare {
+					if u, err := opt.Sizer.Size(gctx, wt.Path); err == nil {
+						a.Facts.Size = &u
+					} else if gctx.Err() == nil {
+						a.Errors = append(a.Errors, "size: "+err.Error())
+					}
+				}
 			}
 			out[i] = a
 			return gctx.Err() // only cancellation aborts; per-worktree problems are recorded
