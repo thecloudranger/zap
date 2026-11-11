@@ -195,3 +195,41 @@ func ReflogSHAs(ctx context.Context, r Runner, dir, ref string) ([]string, error
 	}
 	return strings.Fields(string(out)), nil
 }
+
+// UpdateRef points ref at sha.
+func UpdateRef(ctx context.Context, r Runner, dir, ref, sha string) error {
+	_, err := r.Run(ctx, dir, "update-ref", ref, sha)
+	return err
+}
+
+// RemoveWorktree runs `git worktree remove` without --force, so git itself refuses a
+// worktree with uncommitted or untracked changes.
+func RemoveWorktree(ctx context.Context, r Runner, dir, path string) error {
+	_, err := r.Run(ctx, dir, "worktree", "remove", path)
+	return err
+}
+
+// DeleteBranch force-deletes a local branch. Callers back it up first.
+func DeleteBranch(ctx context.Context, r Runner, dir, branch string) error {
+	_, err := r.Run(ctx, dir, "branch", "-D", "--", branch)
+	return err
+}
+
+// RemoveAdmin unregisters one worktree whose folder is gone by deleting its admin
+// directory; it is `git worktree prune` limited to a single worktree.
+func RemoveAdmin(commonDir, wtPath string) error {
+	if _, err := os.Stat(wtPath); err == nil {
+		return fmt.Errorf("gitx: %s still exists; refusing to unregister it", wtPath)
+	}
+	admin, err := AdminDir(commonDir, wtPath)
+	if err != nil {
+		return err
+	}
+	if filepath.Dir(admin) != filepath.Join(commonDir, "worktrees") {
+		return fmt.Errorf("gitx: unexpected admin dir %s", admin)
+	}
+	if err := os.RemoveAll(admin); err != nil {
+		return fmt.Errorf("gitx: unregister worktree: %w", err)
+	}
+	return nil
+}

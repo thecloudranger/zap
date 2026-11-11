@@ -63,6 +63,8 @@ const (
 	NoMatch Outcome = "no-match"
 	Skipped Outcome = "skipped"
 	Errored Outcome = "error"
+	Pass    Outcome = "pass" // safety gates pass or fail
+	Fail    Outcome = "fail"
 )
 
 // CheckResult records what one check found, for `zap explain`.
@@ -99,6 +101,7 @@ type Assessment struct {
 // RepoReport is everything zap knows about one repository.
 type RepoReport struct {
 	Root      string       `json:"root"`
+	CommonDir string       `json:"commonDir,omitempty"`
 	Target    Target       `json:"target"`
 	Worktrees []Assessment `json:"worktrees"`
 }

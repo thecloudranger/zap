@@ -1,0 +1,61 @@
+package safety
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/thecloudranger/zap/internal/model"
+	"github.com/thecloudranger/zap/internal/policy"
+)
+
+func TestGates(t *testing.T) {
+	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
+	old := now.Add(-48 * time.Hour)
+	ok := model.Assessment{
+		Worktree: model.Worktree{Path: "/r/w", Branch: "feat", Head: "abc"},
+		Facts:    model.Facts{LastActivity: old, Created: old},
+	}
+	tests := []struct {
+		name    string
+		mutate  func(a *model.Assessment, p *policy.Repo)
+		pass    bool
+		failing string
+	}{
+		{"all pass", func(*model.Assessment, *policy.Repo) {}, true, ""},
+		{"main", func(a *model.Assessment, _ *policy.Repo) { a.Main = true }, false, "not-main"},
+		{"target branch", func(a *model.Assessment, _ *policy.Repo) { a.Branch = "main" }, false, "unprotected"},
+		{"protected glob", func(a *model.Assessment, p *policy.Repo) { a.Branch = "release/2"; p.Protect = []string{"release/*"} }, false, "unprotected"},
+		{"locked", func(a *model.Assessment, _ *policy.Repo) { a.Locked, a.LockReason = true, "claude agent" }, false, "unlocked"},
+		{"inspect error", func(a *model.Assessment, _ *policy.Repo) { a.Errors = []string{"status: boom"} }, false, "inspected"},
+		{"dirty", func(a *model.Assessment, _ *policy.Repo) { a.Facts.Dirty, a.Facts.Changes = true, 2 }, false, "clean"},
+		{"too recent", func(a *model.Assessment, _ *policy.Repo) { a.Facts.LastActivity = now.Add(-time.Hour) }, false, "old-enough"},
+		{"unknown activity", func(a *model.Assessment, _ *policy.Repo) { a.Facts.LastActivity = time.Time{} }, false, "old-enough"},
+		{"missing uses created", func(a *model.Assessment, _ *policy.Repo) {
+			a.Prunable, a.Facts.LastActivity = true, time.Time{}
+		}, true, ""},
+		{"cwd inside", func(a *model.Assessment, _ *policy.Repo) { a.Path = "/r/w" }, false, "not-cwd"},
+		{"detached passes protect", func(a *model.Assessment, _ *policy.Repo) { a.Branch, a.Detached = "", true }, true, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, p := ok, policy.Defaults()
+			tt.mutate(&a, &p)
+			s := &Subject{A: a, Target: model.Target{Name: "main"}, Policy: p, Now: now, Cwd: "/elsewhere"}
+			if tt.failing == "not-cwd" {
+				s.Cwd = "/r/w/src"
+			}
+			res, pass := Evaluate(s, Default())
+			assert.Equal(t, tt.pass, pass)
+			assert.Len(t, res, len(Default()), "every gate always runs")
+			for _, r := range res {
+				if r.Check == tt.failing {
+					assert.Equal(t, model.Fail, r.Outcome, r.Detail)
+				} else {
+					assert.NotEqual(t, model.Fail, r.Outcome, "%s: %s", r.Check, r.Detail)
+				}
+			}
+		})
+	}
+}

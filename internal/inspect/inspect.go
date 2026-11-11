@@ -54,7 +54,7 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 	if err := g.Wait(); err != nil {
 		return model.RepoReport{}, fmt.Errorf("inspect: %w", err)
 	}
-	return model.RepoReport{Root: repo.Root, Target: target, Worktrees: out}, nil
+	return model.RepoReport{Root: repo.Root, CommonDir: repo.CommonDir, Target: target, Worktrees: out}, nil
 }
 
 // facts gathers observations; failures are recorded rather than aborting the scan.
