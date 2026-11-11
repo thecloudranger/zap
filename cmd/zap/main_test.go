@@ -69,6 +69,7 @@ func TestScanTable(t *testing.T) {
 	r := run(t, repo, "scan")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "2 linked worktrees")
+	assert.Regexp(t, `WORKTREE\s+BRANCH\s+STATUS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
 	assert.Contains(t, r.stdout, ".claude/worktrees/feat-a")
 	assert.Contains(t, r.stdout, "worktree-feat-a")
 	assert.Contains(t, r.stdout, "fix-b")
@@ -130,4 +131,68 @@ func TestVersion(t *testing.T) {
 	r := run(t, testkit.TempDir(t), "version")
 	require.Equal(t, 0, r.code)
 	assert.Contains(t, r.stdout, "zap ")
+}
+
+func TestScanStatuses(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	merged := testkit.AddWorktree(t, repo, ".claude/worktrees/done", "worktree-done")
+	testkit.Commit(t, merged, "done.txt", "d\n", "done")
+	testkit.MergeFF(t, repo, "worktree-done")
+	open := testkit.AddWorktree(t, repo, ".worktrees/wip", "wip")
+	testkit.Commit(t, open, "wip.txt", "w\n", "wip")
+	testkit.Dirty(t, open)
+
+	r := run(t, repo, "scan")
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "target main")
+	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+merged`, r.stdout)
+	assert.Regexp(t, `\.worktrees/wip\s+wip\s+active\s+\S+\s+\S+\s+dirty\(1\)`, r.stdout)
+	assert.Contains(t, r.stdout, "1 merged · 1 active")
+}
+
+func TestExplain(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	wt := testkit.AddWorktree(t, repo, ".claude/worktrees/done", "worktree-done")
+	testkit.Commit(t, wt, "done.txt", "d\n", "done")
+	testkit.MergeCommit(t, repo, "worktree-done")
+
+	r := run(t, repo, "explain", wt)
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "status   MERGED")
+	assert.Regexp(t, `✓ ancestor\s+tip \w+ is contained in main`, r.stdout)
+	assert.Regexp(t, `✓ empty-diff`, r.stdout, "explain runs every check")
+	assert.Contains(t, r.stdout, "dirty          no")
+
+	r = run(t, repo, "explain", "--json", ".claude/worktrees/done")
+	require.Equal(t, 0, r.code, r.stderr)
+	var env struct {
+		cli.Envelope
+		Data cli.ExplainResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.Equal(t, "merged", string(env.Data.Worktree.Verdict.Status))
+	assert.Len(t, env.Data.Worktree.Verdict.Checks, 3)
+}
+
+func TestExplainMissingAndErrors(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	gone := testkit.AddWorktree(t, repo, ".worktrees/gone", "gone")
+	require.NoError(t, os.RemoveAll(gone))
+
+	r := run(t, repo, "explain", gone)
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "status   MISSING")
+
+	r = run(t, repo, "explain", "--json", repo+"/README.md")
+	assert.Equal(t, cli.ExitFailure, r.code)
+	var env cli.Envelope
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.Equal(t, "not_a_worktree", env.Error.Code)
+
+	r = run(t, repo, "scan", "--json", "--target", "nope")
+	assert.Equal(t, cli.ExitFailure, r.code)
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.Equal(t, "no_target", env.Error.Code)
+
+	assert.Equal(t, cli.ExitUsage, run(t, repo, "explain").code)
 }

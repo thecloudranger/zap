@@ -22,11 +22,14 @@ var allowed = map[string][]string{
 	"internal/model":   {},
 	"internal/version": {},
 	"internal/gitx":    {"internal/model"},
+	"internal/verdict": {"internal/model", "internal/gitx"},
+	"internal/inspect": {"internal/model", "internal/gitx", "internal/verdict"},
 }
 
 // importers restricts who may import a package.
 var importers = map[string][]string{
-	"internal/cli": {"cmd/zap"},
+	"internal/cli":     {"cmd/zap"},
+	"internal/testkit": {}, // test code only
 }
 
 func TestDependencyRules(t *testing.T) {

@@ -4,6 +4,7 @@ package cli
 import (
 	"io"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,13 +18,14 @@ type Deps struct {
 	Out   io.Writer
 	Err   io.Writer
 	Getwd func() (string, error)
+	Now   func() time.Time
 	Home  string // for display only: paths under it are shown as ~/...
 }
 
 // DefaultDeps returns the real implementations.
 func DefaultDeps() Deps {
 	home, _ := os.UserHomeDir()
-	return Deps{Git: gitx.Exec{}, Out: os.Stdout, Err: os.Stderr, Getwd: os.Getwd, Home: home}
+	return Deps{Git: gitx.Exec{}, Out: os.Stdout, Err: os.Stderr, Getwd: os.Getwd, Now: time.Now, Home: home}
 }
 
 // NewRoot builds the zap command tree.
@@ -44,6 +46,6 @@ func NewRoot(d Deps) *cobra.Command {
 	root.SetErr(d.Err)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageErr(err) })
 	root.SetVersionTemplate("zap {{.Version}}\n")
-	root.AddCommand(newScanCmd(d), newVersionCmd())
+	root.AddCommand(newScanCmd(d), newExplainCmd(d), newVersionCmd())
 	return root
 }

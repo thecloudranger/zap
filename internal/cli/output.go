@@ -54,6 +54,10 @@ func errorCode(err error) string {
 	switch {
 	case errors.Is(err, gitx.ErrNotRepo):
 		return "not_a_repo"
+	case errors.Is(err, gitx.ErrNoTarget):
+		return "no_target"
+	case errors.Is(err, ErrNotWorktree):
+		return "not_a_worktree"
 	default:
 		return "error"
 	}
