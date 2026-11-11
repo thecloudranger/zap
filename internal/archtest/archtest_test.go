@@ -27,6 +27,7 @@ var allowed = map[string][]string{
 	"internal/policy":  {"internal/model"},
 	"internal/safety":  {"internal/model", "internal/policy"},
 	"internal/oplog":   {},
+	"internal/restore": {"internal/model", "internal/gitx", "internal/oplog"},
 	"internal/plan": {"internal/model", "internal/gitx", "internal/inspect", "internal/verdict",
 		"internal/policy", "internal/safety", "internal/oplog"},
 }

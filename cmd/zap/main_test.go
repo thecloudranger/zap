@@ -269,6 +269,26 @@ func TestCleanNonInteractive(t *testing.T) {
 	r = zap("clean", "--yes")
 	assert.Equal(t, 0, r.code)
 	assert.Contains(t, r.stdout, "Nothing to zap")
+
+	r = zap("undo")
+	require.Equal(t, 0, r.code, r.stdout+r.stderr)
+	assert.Contains(t, r.stdout, "recreated branch worktree-done")
+	assert.Contains(t, r.stdout, "re-added worktree")
+	assert.DirExists(t, wt)
+	assert.Equal(t, "worktree-done", testkit.Git(t, wt, "branch", "--show-current"))
+
+	r = zap("undo")
+	assert.Equal(t, 0, r.code)
+	assert.Contains(t, r.stdout, "Nothing to undo.")
+
+	r = zap("undo", "--json", "20990101T000000Z")
+	assert.Equal(t, cli.ExitFailure, r.code)
+	var uerr cli.Envelope
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &uerr))
+	assert.Equal(t, "unknown_run", uerr.Error.Code)
+
+	r = zap("history")
+	assert.Contains(t, r.stdout, "restored")
 }
 
 func TestCleanJSONErrors(t *testing.T) {

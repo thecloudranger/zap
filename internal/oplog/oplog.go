@@ -25,9 +25,18 @@ type Entry struct {
 	Status        string    `json:"status"`
 	BackupRef     string    `json:"backupRef,omitempty"`
 	BranchDeleted bool      `json:"branchDeleted"`
-	Result        string    `json:"result"` // "zapped", "skipped" or "failed"
+	Result        string    `json:"result"` // see the Result constants
 	Detail        string    `json:"detail,omitempty"`
 }
+
+// Results recorded in the log.
+const (
+	Zapped        = "zapped"
+	Skipped       = "skipped"
+	Failed        = "failed"
+	Restored      = "restored"       // zap undo brought it back
+	RestoreFailed = "restore-failed" // zap undo tried and failed
+)
 
 // Log appends to and reads <dir>/operations.jsonl.
 type Log struct {

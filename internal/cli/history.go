@@ -53,16 +53,16 @@ func newHistoryCmd(d Deps) *cobra.Command {
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-			_, _ = fmt.Fprintln(tw, "TIME\tRESULT\tWORKTREE\tBRANCH\tBACKUP")
+			_, _ = fmt.Fprintln(tw, "TIME\tRUN\tRESULT\tWORKTREE\tBRANCH\tBACKUP")
 			for _, e := range entries {
-				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.Time.Local().Format("2006-01-02 15:04"), e.Result,
+				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Time.Local().Format("2006-01-02 15:04"), e.Run, e.Result,
 					tildify(e.Path, d.Home), dash(e.Branch), dash(e.BackupRef))
 			}
 			_ = tw.Flush()
 			if skipped > 0 {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %d unreadable log line(s) skipped\n", skipped)
 			}
-			_, _ = fmt.Fprintln(out, "\nRestore a deleted branch: git -C <repo> branch <name> <backup>")
+			_, _ = fmt.Fprintln(out, "\nUndo the latest run with `zap undo`, or a specific one with `zap undo <RUN>`.")
 			return nil
 		},
 	}

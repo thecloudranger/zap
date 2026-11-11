@@ -12,11 +12,11 @@ import (
 	"github.com/thecloudranger/zap/internal/safety"
 )
 
-// Result outcomes.
+// Result outcomes, shared with the operations log.
 const (
-	Zapped  = "zapped"
-	Skipped = "skipped"
-	Failed  = "failed"
+	Zapped  = oplog.Zapped
+	Skipped = oplog.Skipped
+	Failed  = oplog.Failed
 )
 
 // Result is what happened to one item.

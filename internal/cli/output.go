@@ -7,6 +7,7 @@ import (
 
 	"github.com/thecloudranger/zap/internal/gitx"
 	"github.com/thecloudranger/zap/internal/policy"
+	"github.com/thecloudranger/zap/internal/restore"
 )
 
 // SchemaVersion is bumped on any breaking change to the --json envelope or its data.
@@ -60,6 +61,8 @@ func errorCode(err error) string {
 		return "invalid_zap"
 	case errors.Is(err, ErrAlreadyOptedIn):
 		return "already_opted_in"
+	case errors.Is(err, restore.ErrUnknownRun):
+		return "unknown_run"
 	case errors.Is(err, gitx.ErrNotRepo):
 		return "not_a_repo"
 	case errors.Is(err, gitx.ErrNoTarget):
