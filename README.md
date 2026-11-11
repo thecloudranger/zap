@@ -19,6 +19,7 @@ go install github.com/thecloudranger/zap/cmd/zap@latest
 **Run**
 
 ```bash
+zap                      # Interactive picker: choose, review, zap
 zap scan                 # List worktrees of the repo you're in
 zap scan ~/dev/my-app    # …or of any repo by path
 zap scan --all           # …or of every repo under your scan roots
@@ -104,6 +105,10 @@ its branch. Before deleting a branch, zap saves its tip under `refs/zap/backup/`
 the worktrees at their old paths (`zap history` lists runs; `zap undo <RUN>` picks one). Files
 git ignores inside a removed worktree (`node_modules`, build output, `.env`) are deleted for
 good and cannot be restored.
+
+Running `zap` with no command opens a picker: worktrees zap would remove start selected, kept
+ones show why, `e` shows every safety check for a worktree, `i` opts a repository in, and
+`enter` reviews the selection before anything is removed.
 
 The first time you clean, zap asks you to read a short disclaimer and type `zap`. In scripts,
 `zap clean --yes` skips the confirmation (the disclaimer must have been accepted once), and
