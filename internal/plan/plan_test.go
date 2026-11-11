@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -228,4 +229,31 @@ func TestIgnoredSecretsAndHiddenChangesKeepWorktrees(t *testing.T) {
 	assert.Equal(t, Remove, items[deps].Action, "rebuildable dependencies do not block removal: %s", items[deps].Refusal)
 	assert.Equal(t, Keep, items[hidden].Action, "status looks clean, but a change is hidden")
 	assert.Contains(t, items[hidden].Refusal, "assume-unchanged")
+}
+
+func TestStaleLockReleasedOnlyWhenAsked(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	wt := mergedWT(t, repo, ".claude/worktrees/crashed", "worktree-crashed")
+	gone := exec.Command("true")
+	require.NoError(t, gone.Run())
+	reason := fmt.Sprintf("claude agent agent-1 (pid %d)", gone.Process.Pid)
+	testkit.Git(t, repo, "worktree", "lock", "--reason", reason, wt)
+	optIn(t, repo, `min_age = "0"`)
+
+	p, err := Build(t.Context(), gitx.Exec{}, repo, Options{Now: time.Now()})
+	require.NoError(t, err)
+	assert.Equal(t, Keep, byPath(p)[wt].Action)
+	assert.Contains(t, byPath(p)[wt].Refusal, "--unlock-stale")
+
+	p, err = Build(t.Context(), gitx.Exec{}, repo, Options{Now: time.Now(), UnlockStale: true})
+	require.NoError(t, err)
+	it := byPath(p)[wt]
+	require.Equal(t, Remove, it.Action, it.Refusal)
+	assert.Equal(t, "release stale lock, remove worktree, delete branch", it.Describe())
+
+	res, err := Apply(t.Context(), gitx.Exec{}, p, ApplyOptions{Now: time.Now, Log: oplog.Log{Dir: t.TempDir()}})
+	require.NoError(t, err)
+	require.Len(t, res, 1)
+	assert.Equal(t, Zapped, res[0].Outcome, res[0].Detail)
+	assert.NoDirExists(t, wt)
 }

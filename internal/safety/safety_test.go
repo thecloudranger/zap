@@ -91,3 +91,32 @@ func TestHiddenAndKeptIgnored(t *testing.T) {
 	assert.Equal(t, model.Pass, NoKeptIgnored{}.Eval(s).Outcome)
 	assert.Equal(t, model.Pass, NoHiddenChanges{}.Eval(s).Outcome)
 }
+
+func TestStaleLocks(t *testing.T) {
+	for reason, want := range map[string]int{
+		"claude agent agent-1 (pid 4242)": 4242, "PID: 7": 7, "pid=99 started by codex": 99,
+		"rapid 12": 0, "agent running": 0, "": 0,
+	} {
+		pid, ok := LockPID(reason)
+		assert.Equal(t, want, pid, reason)
+		assert.Equal(t, want > 0, ok, reason)
+	}
+
+	dead := func(int) bool { return false }
+	alive := func(int) bool { return true }
+	locked := model.Assessment{Worktree: model.Worktree{Locked: true, LockReason: "agent (pid 4242)"}}
+
+	r := Unlocked{}.Eval(&Subject{A: locked, Alive: alive})
+	assert.Equal(t, model.Fail, r.Outcome, "a live owner keeps its lock")
+
+	r = Unlocked{}.Eval(&Subject{A: locked, Alive: dead})
+	assert.Equal(t, model.Fail, r.Outcome, "stale, but not released without the flag")
+	assert.Contains(t, r.Detail, "--unlock-stale")
+
+	r = Unlocked{}.Eval(&Subject{A: locked, Alive: dead, UnlockStale: true})
+	assert.Equal(t, model.Pass, r.Outcome)
+
+	noPID := model.Assessment{Worktree: model.Worktree{Locked: true, LockReason: "on a USB drive"}}
+	assert.Equal(t, model.Fail, Unlocked{}.Eval(&Subject{A: noPID, Alive: dead, UnlockStale: true}).Outcome,
+		"a lock without a pid is never released")
+}

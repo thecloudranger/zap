@@ -5,6 +5,8 @@ package safety
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,10 @@ type Subject struct {
 	Now    time.Time
 	Cwd    string // zap's working directory; a worktree containing it is kept
 	Procs  *Procs // running processes; nil means not checked
+	// UnlockStale lets a lock whose recorded pid is no longer running pass Unlocked.
+	UnlockStale bool
+	// Alive reports whether a pid is running; nil means procs.Alive.
+	Alive func(pid int) bool
 }
 
 // Procs is a snapshot of running processes' working directories.
@@ -97,7 +103,9 @@ func (Unprotected) Eval(s *Subject) model.CheckResult {
 	return pass("branch %q is not protected", b)
 }
 
-// Unlocked refuses locked worktrees; agents such as Claude Code lock while running.
+// Unlocked refuses locked worktrees; agents lock the worktrees they are using. A lock
+// whose reason names a pid that is no longer running is stale: it passes only when the
+// user asked for --unlock-stale.
 type Unlocked struct{}
 
 // Name implements Gate.
@@ -105,13 +113,45 @@ func (Unlocked) Name() string { return "unlocked" }
 
 // Eval implements Gate.
 func (Unlocked) Eval(s *Subject) model.CheckResult {
-	if s.A.Locked {
-		if s.A.LockReason != "" {
-			return fail("locked: %s", s.A.LockReason)
-		}
-		return fail("locked")
+	if !s.A.Locked {
+		return pass("not locked")
 	}
-	return pass("not locked")
+	what := "locked"
+	if s.A.LockReason != "" {
+		what += ": " + s.A.LockReason
+	}
+	if !StaleLock(s.A.LockReason, s.Alive) {
+		return fail("%s", what)
+	}
+	pid, _ := LockPID(s.A.LockReason)
+	if s.UnlockStale {
+		return pass("stale lock (pid %d is not running); it will be released", pid)
+	}
+	return fail("%s (pid %d is not running; --unlock-stale releases it)", what, pid)
+}
+
+var pidPattern = regexp.MustCompile(`(?i)\bpid[\s:=#]*(\d+)`)
+
+// LockPID extracts the pid a lock reason names, such as "agent-1 (pid 4242)".
+func LockPID(reason string) (int, bool) {
+	m := pidPattern.FindStringSubmatch(reason)
+	if m == nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(m[1])
+	return pid, err == nil && pid > 0
+}
+
+// StaleLock reports whether a lock reason names a pid that is no longer running.
+func StaleLock(reason string, alive func(int) bool) bool {
+	pid, ok := LockPID(reason)
+	if !ok {
+		return false
+	}
+	if alive == nil {
+		alive = procs.Alive
+	}
+	return !alive(pid)
 }
 
 // Inspected refuses worktrees zap could not fully inspect: doubt means keep.

@@ -356,3 +356,9 @@ func HiddenChanges(ctx context.Context, r Runner, wt string) (int, error) {
 	}
 	return n, nil
 }
+
+// Unlock releases `git worktree lock` on path.
+func Unlock(ctx context.Context, r Runner, dir, path string) error {
+	_, err := r.Run(ctx, dir, "worktree", "unlock", path)
+	return err
+}

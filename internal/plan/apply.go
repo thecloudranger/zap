@@ -101,7 +101,8 @@ func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current ma
 		return r
 	}
 	a := current[it.Path]
-	if _, ok := safety.Evaluate(&safety.Subject{A: a, Target: p.Target, Policy: p.Policy, Now: opt.Now(), Cwd: opt.Cwd, Procs: running}, gates); !ok {
+	if _, ok := safety.Evaluate(&safety.Subject{A: a, Target: p.Target, Policy: p.Policy, Now: opt.Now(), Cwd: opt.Cwd,
+		Procs: running, UnlockStale: p.UnlockStale}, gates); !ok {
 		r.Outcome, r.Detail = Skipped, "a safety gate no longer passes"
 		return r
 	}
@@ -117,6 +118,12 @@ func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current ma
 		return r
 	}
 
+	if it.Unlock && a.Locked { // a stale lock the user asked to release
+		if err := gitx.Unlock(ctx, git, p.Repo, it.Path); err != nil {
+			r.Outcome, r.Detail = Failed, "unlock: "+err.Error()
+			return r
+		}
+	}
 	var err error
 	if it.Action == Prune {
 		err = gitx.RemoveAdmin(p.CommonDir, it.Path)

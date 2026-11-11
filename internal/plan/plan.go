@@ -42,6 +42,7 @@ type Item struct {
 	Eligible     bool                `json:"eligible"`          // passed every safety gate
 	Gates        []model.CheckResult `json:"gates"`
 	Size         *model.Usage        `json:"size,omitempty"`
+	Unlock       bool                `json:"unlock,omitempty"` // release a stale lock first
 }
 
 // Plan is everything clean would do in one repository.
@@ -54,6 +55,7 @@ type Plan struct {
 	Items       []Item       `json:"items"`
 	ActiveCount int          `json:"activeCount"` // worktrees that are not candidates at all
 	Warnings    []string     `json:"warnings,omitempty"`
+	UnlockStale bool         `json:"unlockStale,omitempty"`
 }
 
 // Options control Build.
@@ -66,6 +68,8 @@ type Options struct {
 	Gates  []safety.Gate // nil means safety.Default()
 	// Procs lists running processes; nil means procs.List.
 	Procs func(context.Context) ([]procs.Proc, error)
+	// UnlockStale releases locks whose recorded pid is no longer running.
+	UnlockStale bool
 }
 
 // Build inspects the repository containing dir and plans its cleanup.
@@ -94,7 +98,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 	if gates == nil {
 		gates = safety.Default()
 	}
-	p := Plan{Repo: rep.Root, CommonDir: rep.CommonDir, Target: rep.Target, OptedIn: found, Policy: pol, Warnings: rep.Warnings}
+	p := Plan{Repo: rep.Root, CommonDir: rep.CommonDir, Target: rep.Target, OptedIn: found, Policy: pol, Warnings: rep.Warnings, UnlockStale: opt.UnlockStale}
 	for _, a := range rep.Worktrees {
 		if a.Main {
 			continue
@@ -119,7 +123,8 @@ func snapshot(ctx context.Context, list func(context.Context) ([]procs.Proc, err
 
 func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options, running *safety.Procs) Item {
 	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason, Size: a.Facts.Size}
-	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd, Procs: running}, gates)
+	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd,
+		Procs: running, UnlockStale: opt.UnlockStale}, gates)
 	it.Gates, it.Eligible = results, ok
 	switch {
 	case !ok:
@@ -131,6 +136,7 @@ func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a mode
 	default:
 		it.Action = Remove
 	}
+	it.Unlock = it.Action != Keep && a.Locked
 	it.DeleteBranch, it.BranchNote = branchDecision(ctx, git, rep, a, pol)
 	return it
 }
@@ -192,6 +198,9 @@ func (it Item) Describe() string {
 	s := "remove worktree"
 	if it.Action == Prune {
 		s = "unregister (folder already gone)"
+	}
+	if it.Unlock {
+		s = "release stale lock, " + s
 	}
 	switch {
 	case it.DeleteBranch:
