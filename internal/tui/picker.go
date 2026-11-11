@@ -432,7 +432,7 @@ func (p *Picker) review() string {
 		shown++
 	}
 	b.WriteString("\nBranches are backed up under refs/zap/backup/ first; `zap undo` brings them back.\n")
-	b.WriteString(warnStyle.Render("Ignored files (node_modules, build output, .env) are deleted for good.") + "\n\n")
+	b.WriteString(warnStyle.Render("Other ignored files (node_modules, build output, caches) are deleted for good.") + "\n\n")
 	b.WriteString(emphStyle.Render("y") + " zap · " + emphStyle.Render("n") + " back\n")
 	return b.String()
 }

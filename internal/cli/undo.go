@@ -25,7 +25,7 @@ func newUndoCmd(d Deps) *cobra.Command {
 		Short: "Bring back the branches and worktrees removed by a clean run (default: the latest)",
 		Long: "Bring back the branches and worktrees removed by a clean run (default: the latest).\n\n" +
 			"Branches are recreated from their backup refs and worktrees are re-added at their old\n" +
-			"paths. Files git ignores (node_modules, build output, .env) cannot be restored.",
+			"paths. Files git ignores (node_modules, build output, caches) cannot be restored.",
 		Args: usageArgs(cobra.MaximumNArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -95,5 +95,5 @@ func renderUndo(cmd *cobra.Command, run string, outs []restore.Outcome, dryRun b
 		_, _ = fmt.Fprintln(w, "\nDry run: nothing was changed.")
 		return
 	}
-	_, _ = fmt.Fprintln(w, "\nFiles git ignores (node_modules, build output, .env) were not restored.")
+	_, _ = fmt.Fprintln(w, "\nFiles git ignores (node_modules, build output, caches) were not restored.")
 }

@@ -33,12 +33,13 @@ const disclaimer = `Before zap deletes anything, please read this once:
 
   • zap removes git worktrees, and by default their branches.
   • It only acts in repositories that contain a .zap file (see: zap init).
-  • It only removes worktrees that pass every safety check: clean, unlocked,
-    not protected, not active within min_age, and not where you are standing.
-  • Before deleting a branch it saves the tip under refs/zap/backup/, so the
-    branch can be restored with: git branch <name> <backup-ref>
-  • Files git ignores inside a removed worktree (node_modules, build output,
-    .env and other local secrets) are deleted and cannot be restored.
+  • It only removes worktrees that pass every safety check: clean, nothing hidden
+    from git status, unlocked, not protected, not active within min_age, no other
+    process working in it, no ignored secrets (keep_ignored), and not where you are.
+  • Before deleting a branch it saves the tip under refs/zap/backup/, and
+    zap undo brings branches and worktrees back.
+  • Other files git ignores inside a removed worktree (node_modules, build
+    output, caches) are deleted and cannot be restored.
 
 `
 
