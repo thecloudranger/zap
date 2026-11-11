@@ -63,6 +63,7 @@ Linked worktrees use about 2.2 GB; 1.5 GB of that is in merged or empty ones.
 | `merged` | Its work is already in the target branch: fast-forward, merge commit, squash or rebase merge |
 | `empty` | It never got a commit of its own |
 | `gone` | Its remote branch was deleted (often after a pull request is merged) |
+| `idle` | Unmerged and untouched for `idle_after` (only with `"idle"` in `.zap` rules) |
 | `missing` | Git still lists it, but its folder is gone |
 | `active` | Anything else |
 
@@ -71,7 +72,8 @@ AGENT is guessed from the folder a worktree lives in (for example `.claude/workt
 `~/.codex/worktrees`). `zap scan` outside a repository, or with `--all`, searches `~/dev`, `~/code`,
 `~/src`, `~/projects` and known agent worktree folders; `zap roots` changes that list.
 Add `--fetch` to `scan`, `explain` or `clean` to fetch remotes first, so pull requests merged on
-GitHub are seen.
+GitHub are seen. Add `--gh` to also ask GitHub (through the `gh` CLI) for merged pull requests; one
+only counts if its head commit is exactly the branch tip.
 
 SIZE is what removing a worktree would free, measured like `du`; DEPS is the part of it in
 dependency and build folders such as `node_modules`, `.venv` and `target`. Hard-linked files
@@ -87,24 +89,40 @@ shares the same rules:
 ```toml
 # .zap (every key is optional; these are the defaults)
 # target = "main"                       # default: origin/HEAD, then main, then master
-rules         = ["merged", "empty", "missing"]   # "gone" can be added
+rules         = ["merged", "empty", "missing"]   # "gone" and "idle" can be added
 min_age       = "1d"                    # skip anything active more recently (m, h, d, w)
+idle_after    = "30d"                   # when an unmerged worktree counts as idle
 delete_branch = true
 protect       = ["main", "master"]      # branch globs that are never removed
+keep_ignored  = [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"]
 ```
 
-A worktree is removed only if it passes every check: not the main worktree, not a protected
-or target branch, not locked with `git worktree lock`, no uncommitted or untracked changes, no activity within `min_age`, and not the directory you run zap from.
-zap re-checks each worktree right before removing it and skips anything that changed.
+A worktree is removed only if it passes every check:
+
+- not the main worktree, and not on a protected or target branch
+- not locked with `git worktree lock`
+- no uncommitted or untracked changes, and no files whose changes git status is told to hide
+  (`assume-unchanged`, or `skip-worktree` outside a sparse checkout)
+- no ignored files matching `keep_ignored`, such as `.env` or keys, which are not in git
+- no activity within `min_age`
+- no other process (a shell, editor or agent) working inside it, and not the directory you
+  run zap from
+
+If a check cannot run, the worktree is kept. zap re-checks each worktree right before removing
+it and skips anything that changed.
+
+A lock whose reason names a process that is no longer running is reported as stale;
+`zap clean --unlock-stale` releases it. Idle worktrees are never removed by `zap clean`: the
+picker offers them unselected, and removing one keeps its branch.
 
 Branches are deleted only when their work is provably in the target (or they have none);
 a `gone` or `missing` worktree with unmerged commits loses its folder or registration but keeps
 its branch. Before deleting a branch, zap saves its tip under `refs/zap/backup/`.
 
 `zap undo` brings back the last run: it recreates the branches from those backups and re-adds
-the worktrees at their old paths (`zap history` lists runs; `zap undo <RUN>` picks one). Files
-git ignores inside a removed worktree (`node_modules`, build output, `.env`) are deleted for
-good and cannot be restored.
+the worktrees at their old paths (`zap history` lists runs; `zap undo <RUN>` picks one). Other
+files git ignores inside a removed worktree (`node_modules`, build output, caches) are deleted
+for good and cannot be restored.
 
 Running `zap` with no command opens a picker: worktrees zap would remove start selected, kept
 ones show why, `e` shows every safety check for a worktree, `i` opts a repository in, and
