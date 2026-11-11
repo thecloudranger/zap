@@ -28,6 +28,7 @@ zap init                 # Opt this repo in to cleaning (writes .zap)
 zap clean --dry-run      # Show what would be removed, and what is kept and why
 zap clean                # Remove them, after a confirmation
 zap history              # What zap removed, with backup refs
+zap undo                 # Bring back what the last clean removed
 zap version              # Show version
 ```
 
@@ -45,12 +46,15 @@ zap version              # Show version
 
 | Status | Meaning |
 |---|---|
-| `merged` | Its commits are already in the target branch |
+| `merged` | Its work is already in the target branch: fast-forward, merge commit, squash or rebase merge |
 | `empty` | It never got a commit of its own |
+| `gone` | Its remote branch was deleted (often after a pull request is merged) |
 | `missing` | Git still lists it, but its folder is gone |
 | `active` | Anything else |
 
 The target branch is `origin/HEAD`, then `main`, then `master`; override it with `--target`.
+Add `--fetch` to `scan`, `explain` or `clean` to fetch remotes first, so pull requests merged on
+GitHub are seen.
 
 ## Cleaning safely
 
@@ -61,7 +65,7 @@ shares the same rules:
 ```toml
 # .zap (every key is optional; these are the defaults)
 # target = "main"                       # default: origin/HEAD, then main, then master
-rules         = ["merged", "empty", "missing"]
+rules         = ["merged", "empty", "missing"]   # "gone" can be added
 min_age       = "1d"                    # skip anything active more recently (m, h, d, w)
 delete_branch = true
 protect       = ["main", "master"]      # branch globs that are never removed
@@ -71,9 +75,14 @@ A worktree is removed only if it passes every check: not the main worktree, not 
 or target branch, not locked with `git worktree lock`, no uncommitted or untracked changes, no activity within `min_age`, and not the directory you run zap from.
 zap re-checks each worktree right before removing it and skips anything that changed.
 
-Before deleting a branch, zap saves its tip under `refs/zap/backup/`; `zap history` lists
-them, and `git branch <name> <backup-ref>` brings a branch back. Files git ignores inside a
-removed worktree (`node_modules`, build output, `.env`) are deleted for good.
+Branches are deleted only when their work is provably in the target (or they have none);
+a `gone` or `missing` worktree with unmerged commits loses its folder or registration but keeps
+its branch. Before deleting a branch, zap saves its tip under `refs/zap/backup/`.
+
+`zap undo` brings back the last run: it recreates the branches from those backups and re-adds
+the worktrees at their old paths (`zap history` lists runs; `zap undo <RUN>` picks one). Files
+git ignores inside a removed worktree (`node_modules`, build output, `.env`) are deleted for
+good and cannot be restored.
 
 The first time you clean, zap asks you to read a short disclaimer and type `zap`. In scripts,
 `zap clean --yes` skips the confirmation (the disclaimer must have been accepted once), and
