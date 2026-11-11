@@ -75,7 +75,8 @@ func TestScanTable(t *testing.T) {
 	r := run(t, repo, "scan")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "2 linked worktrees")
-	assert.Regexp(t, `WORKTREE\s+BRANCH\s+STATUS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
+	assert.Regexp(t, `WORKTREE\s+BRANCH\s+AGENT\s+STATUS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
+	assert.Regexp(t, `\.claude/worktrees/feat-a\s+worktree-feat-a\s+claude\s`, r.stdout)
 	assert.Contains(t, r.stdout, ".claude/worktrees/feat-a")
 	assert.Contains(t, r.stdout, "worktree-feat-a")
 	assert.Contains(t, r.stdout, "fix-b")
@@ -111,11 +112,11 @@ func TestScanJSONFromInsideWorktreeAndByPath(t *testing.T) {
 func TestScanNotARepo(t *testing.T) {
 	dir := testkit.TempDir(t)
 
-	r := run(t, dir, "scan")
-	assert.Equal(t, cli.ExitFailure, r.code)
+	r := run(t, testkit.TempDir(t), "scan", dir)
+	assert.Equal(t, cli.ExitFailure, r.code, "an explicit PATH must be a repository")
 	assert.Contains(t, r.stderr, "not a git repository")
 
-	r = run(t, dir, "scan", "--json")
+	r = run(t, testkit.TempDir(t), "scan", "--json", dir)
 	assert.Equal(t, cli.ExitFailure, r.code)
 	assert.Empty(t, r.stderr, "json errors are reported once, on stdout")
 	var env cli.Envelope
@@ -123,6 +124,10 @@ func TestScanNotARepo(t *testing.T) {
 	assert.Equal(t, "error", env.Status)
 	require.NotNil(t, env.Error)
 	assert.Equal(t, "not_a_repo", env.Error.Code)
+
+	r = run(t, dir, "scan")
+	assert.Equal(t, 0, r.code, "outside a repository, scan searches the scan roots")
+	assert.Contains(t, r.stdout, "Scanned 0 repositories")
 }
 
 func TestUsageErrors(t *testing.T) {
@@ -151,13 +156,13 @@ func TestScanStatuses(t *testing.T) {
 	r := run(t, repo, "scan")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "target main")
-	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+merged`, r.stdout)
-	assert.Regexp(t, `\.worktrees/wip\s+wip\s+active\s+\S+\s+\S+\s+dirty\(1\)`, r.stdout)
+	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+claude\s+merged`, r.stdout)
+	assert.Regexp(t, `\.worktrees/wip\s+wip\s+-\s+active\s+\S+\s+\S+\s+dirty\(1\)`, r.stdout)
 	assert.Contains(t, r.stdout, "1 merged · 1 active")
 
 	testkit.AddWorktree(t, repo, ".claude/worktrees/fresh", "worktree-fresh")
 	r = run(t, repo, "scan")
-	assert.Regexp(t, `\.claude/worktrees/fresh\s+worktree-fresh\s+empty`, r.stdout)
+	assert.Regexp(t, `\.claude/worktrees/fresh\s+worktree-fresh\s+claude\s+empty`, r.stdout)
 	assert.Contains(t, r.stdout, "1 merged · 1 empty · 1 active")
 }
 
@@ -310,4 +315,52 @@ func acceptDisclaimer(t *testing.T, home string) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.toml"),
 		[]byte("[disclaimer]\nversion = 1\naccepted_at = 2026-11-11T00:00:00Z\n"), 0o644))
+}
+
+func TestScanAll(t *testing.T) {
+	home := testkit.TempDir(t)
+	mk := func(rel string) string {
+		p := filepath.Join(home, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		testkit.Git(t, filepath.Dir(p), "init", "-q", "-b", "main", filepath.Base(p))
+		testkit.Commit(t, p, "README.md", "x\n", "init")
+		return p
+	}
+	app := mk("dev/app")
+	testkit.AddWorktree(t, app, ".claude/worktrees/feat", "worktree-feat")
+	mk("dev/quiet") // no worktrees: counted but not listed
+	lib := mk("elsewhere/lib")
+	testkit.Git(t, lib, "worktree", "add", "-q", "-b", "agent-1", filepath.Join(home, ".codex", "worktrees", "1", "lib"))
+
+	r := runHome(t, home, home, "scan", "--all")
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "~/dev/app  ·  1 linked worktree")
+	assert.Contains(t, r.stdout, "~/elsewhere/lib  ·  1 linked worktree", "found through the codex agent folder")
+	assert.Regexp(t, `~/\.codex/worktrees/1/lib\s+agent-1\s+codex\s`, r.stdout)
+	assert.NotContains(t, r.stdout, "quiet")
+	assert.Contains(t, r.stdout, "Scanned 3 repositories")
+
+	r = runHome(t, home, home, "scan", "--all", "--json")
+	require.Equal(t, 0, r.code)
+	var env struct {
+		Data cli.ScanResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.True(t, env.Data.All)
+	assert.Len(t, env.Data.Repos, 3)
+
+	// Custom roots replace the defaults.
+	require.Equal(t, 0, runHome(t, home, home, "roots", "add", filepath.Join(home, "elsewhere")).code)
+	require.Equal(t, 0, runHome(t, home, home, "roots", "remove", "~/dev").code)
+	r = runHome(t, home, home, "roots")
+	assert.Contains(t, r.stdout, "~/elsewhere")
+	assert.NotContains(t, r.stdout, "~/dev")
+	r = runHome(t, home, home, "scan", "--all")
+	assert.NotContains(t, r.stdout, "~/dev/app")
+	assert.Contains(t, r.stdout, "~/elsewhere/lib")
+	assert.Equal(t, cli.ExitUsage, runHome(t, home, home, "roots", "remove", "~/nope").code)
+	assert.Equal(t, 0, runHome(t, home, home, "roots", "reset").code)
+	assert.Contains(t, runHome(t, home, home, "roots").stdout, "These are the defaults")
+
+	assert.Equal(t, cli.ExitUsage, runHome(t, home, home, "scan", "--all", app).code)
 }

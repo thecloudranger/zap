@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thecloudranger/zap/internal/agent"
 	"github.com/thecloudranger/zap/internal/gitx"
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/verdict"
@@ -40,6 +41,15 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 			warnings = append(warnings, "fetch failed, using the last fetched state: "+err.Error())
 		}
 	}
+	if len(repo.Linked()) == 0 {
+		// Nothing to judge: skip the target lookup (repos on gh-pages or without commits
+		// have none) and the per-worktree work.
+		out := make([]model.Assessment, len(repo.Worktrees))
+		for i, wt := range repo.Worktrees {
+			out[i] = model.Assessment{Worktree: wt, Verdict: model.Verdict{Status: model.StatusMain, Reason: "main worktree of the repository"}}
+		}
+		return model.RepoReport{Root: repo.Root, CommonDir: repo.CommonDir, Worktrees: out, Warnings: warnings}, nil
+	}
 	target, err := gitx.ResolveTarget(ctx, git, repo.Root, opt.Target)
 	if err != nil {
 		return model.RepoReport{}, err
@@ -55,8 +65,10 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 	for i, wt := range repo.Worktrees {
 		g.Go(func() error {
 			s := &verdict.Subject{Git: git, Repo: repo, WT: wt, Target: target}
-			a := model.Assessment{Worktree: wt, Verdict: verdict.Evaluate(gctx, s, rules, opt.AllRules)}
-			a.Facts, a.Errors = facts(gctx, git, repo.CommonDir, wt)
+			a := model.Assessment{Worktree: wt, Agent: agent.Detect(wt.Path), Verdict: verdict.Evaluate(gctx, s, rules, opt.AllRules)}
+			if !wt.Main { // the main worktree is never a candidate; its facts are not needed
+				a.Facts, a.Errors = facts(gctx, git, repo.CommonDir, wt)
+			}
 			out[i] = a
 			return gctx.Err() // only cancellation aborts; per-worktree problems are recorded
 		})

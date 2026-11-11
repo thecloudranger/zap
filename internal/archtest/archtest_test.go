@@ -19,15 +19,17 @@ const module = "github.com/thecloudranger/zap/"
 // allowed lists, per package, the internal packages it may import. Packages not listed
 // may import any internal package except those guarded by importers below.
 var allowed = map[string][]string{
-	"internal/model":   {},
-	"internal/version": {},
-	"internal/gitx":    {"internal/model"},
-	"internal/verdict": {"internal/model", "internal/gitx"},
-	"internal/inspect": {"internal/model", "internal/gitx", "internal/verdict"},
-	"internal/policy":  {"internal/model"},
-	"internal/safety":  {"internal/model", "internal/policy"},
-	"internal/oplog":   {},
-	"internal/restore": {"internal/model", "internal/gitx", "internal/oplog"},
+	"internal/model":    {},
+	"internal/version":  {},
+	"internal/gitx":     {"internal/model"},
+	"internal/verdict":  {"internal/model", "internal/gitx"},
+	"internal/inspect":  {"internal/model", "internal/gitx", "internal/verdict", "internal/agent"},
+	"internal/agent":    {},
+	"internal/discover": {},
+	"internal/policy":   {"internal/model"},
+	"internal/safety":   {"internal/model", "internal/policy"},
+	"internal/oplog":    {},
+	"internal/restore":  {"internal/model", "internal/gitx", "internal/oplog"},
 	"internal/plan": {"internal/model", "internal/gitx", "internal/inspect", "internal/verdict",
 		"internal/policy", "internal/safety", "internal/oplog"},
 }

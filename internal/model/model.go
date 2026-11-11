@@ -94,6 +94,7 @@ type Facts struct {
 // Assessment is a worktree with its facts and verdict.
 type Assessment struct {
 	Worktree
+	Agent   string   `json:"agent,omitempty"` // tool that created it, guessed from its folder
 	Facts   Facts    `json:"facts"`
 	Verdict Verdict  `json:"verdict"`
 	Errors  []string `json:"errors,omitempty"`

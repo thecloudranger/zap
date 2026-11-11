@@ -17,13 +17,21 @@ const DisclaimerVersion = 1
 
 // Config is zap's global, per-user configuration (config.toml in the config dir).
 type Config struct {
-	Disclaimer Acceptance `toml:"disclaimer"`
+	Disclaimer Acceptance `toml:"disclaimer,omitempty"`
+	Scan       Scan       `toml:"scan,omitempty"`
+}
+
+// Scan configures machine-wide discovery.
+type Scan struct {
+	// Roots are the folders searched for repositories; empty means the defaults.
+	// A leading ~ means the home directory.
+	Roots []string `toml:"roots,omitempty"`
 }
 
 // Acceptance records that the user accepted the disclaimer.
 type Acceptance struct {
-	Version    int       `toml:"version"`
-	AcceptedAt time.Time `toml:"accepted_at"`
+	Version    int       `toml:"version,omitempty"`
+	AcceptedAt time.Time `toml:"accepted_at,omitzero"`
 }
 
 // Accepted reports whether the current disclaimer was accepted.

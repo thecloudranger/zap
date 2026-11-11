@@ -80,6 +80,6 @@ func NewRoot(d Deps) *cobra.Command {
 	root.SetErr(d.Err)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageErr(err) })
 	root.SetVersionTemplate("zap {{.Version}}\n")
-	root.AddCommand(newScanCmd(d), newExplainCmd(d), newInitCmd(d), newCleanCmd(d), newHistoryCmd(d), newUndoCmd(d), newVersionCmd())
+	root.AddCommand(newScanCmd(d), newExplainCmd(d), newInitCmd(d), newCleanCmd(d), newHistoryCmd(d), newUndoCmd(d), newRootsCmd(d), newVersionCmd())
 	return root
 }

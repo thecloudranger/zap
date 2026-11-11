@@ -12,29 +12,51 @@ import (
 )
 
 func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
+	for _, warn := range res.Warnings {
+		_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
+	}
+	if len(res.Warnings) > 0 {
+		_, _ = fmt.Fprintln(w)
+	}
+	shown := 0
 	for _, rep := range res.Repos {
+		linked := linkedOf(rep)
+		if res.All && len(linked) == 0 {
+			continue // machine-wide: only repositories that have worktrees
+		}
+		shown++
 		for _, warn := range rep.Warnings {
 			_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
 		}
-		linked := linkedOf(rep)
 		_, _ = fmt.Fprintf(w, "%s  ·  %d linked worktree%s  ·  target %s\n\n",
 			tildify(rep.Root, home), len(linked), plural(len(linked)), rep.Target.Name)
 		if len(linked) == 0 {
 			continue
 		}
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(tw, "  WORKTREE\tBRANCH\tSTATUS\tAGE\tACTIVE\tNOTES")
+		_, _ = fmt.Fprintln(tw, "  WORKTREE\tBRANCH\tAGENT\tSTATUS\tAGE\tACTIVE\tNOTES")
 		for _, a := range linked {
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\n",
-				relTo(a.Path, rep.Root, home), branchLabel(a.Worktree), a.Verdict.Status,
+			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				relTo(a.Path, rep.Root, home), branchLabel(a.Worktree), dash(a.Agent), a.Verdict.Status,
 				ago(now, a.Facts.Created), ago(now, a.Facts.LastActivity), notes(a))
 		}
 		if err := tw.Flush(); err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(w, "\n"+summaryLine(linked))
+		_, _ = fmt.Fprintln(w, "\n"+summaryLine(linked)+"\n")
+	}
+	if res.All {
+		_, _ = fmt.Fprintf(w, "Scanned %d repositor%s in %s; %d with linked worktrees. Roots: zap roots\n",
+			res.Scanned, pluralY(res.Scanned), res.Elapsed.Round(100*time.Millisecond), shown)
 	}
 	return nil
+}
+
+func pluralY(n int) string {
+	if n == 1 {
+		return "y"
+	}
+	return "ies"
 }
 
 func linkedOf(rep model.RepoReport) []model.Assessment {
@@ -58,7 +80,7 @@ func summaryLine(as []model.Assessment) string {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[s], s))
 		}
 	}
-	return strings.Join(parts, " · ") + "   (zap explain <path> for details)"
+	return strings.Join(parts, " · ")
 }
 
 func notes(a model.Assessment) string {
