@@ -23,6 +23,7 @@ zap scan                 # List worktrees of the repo you're in
 zap scan ~/dev/my-app    # …or of any repo by path
 zap scan --all           # …or of every repo under your scan roots
 zap scan --json          # JSON output for scripts and agents
+zap scan --no-size       # Skip measuring disk use
 zap explain <path>       # Why a worktree got its status: every check, pass/fail
 
 zap init                 # Opt this repo in to cleaning (writes .zap)
@@ -39,20 +40,21 @@ zap version              # Show version
 $ zap scan --all
 ~/dev/api  ·  1 linked worktree  ·  target main
 
-  WORKTREE                     BRANCH   AGENT  STATUS  AGE  ACTIVE  NOTES
-  ~/.codex/worktrees/a1f3/api  a85e7da  codex  empty   6h   6h      detached
+  WORKTREE                     BRANCH   AGENT  STATUS  SIZE    DEPS    AGE  ACTIVE  NOTES
+  ~/.codex/worktrees/a1f3/api  a85e7da  codex  empty   412 MB  398 MB  6h   6h      detached
 
-1 empty
+1 empty  ·  412 MB, 412 MB merged or empty
 
 ~/dev/my-app  ·  2 linked worktrees  ·  target main
 
-  WORKTREE                BRANCH         AGENT   STATUS  AGE  ACTIVE  NOTES
-  .claude/worktrees/auth  worktree-auth  claude  merged  3d   2d      -
-  .worktrees/login        fix/login      -       active  5d   2h      dirty(1)
+  WORKTREE                BRANCH         AGENT   STATUS  SIZE    DEPS    AGE  ACTIVE  NOTES
+  .claude/worktrees/auth  worktree-auth  claude  merged  1.1 GB  1.0 GB  3d   2d      -
+  .worktrees/login        fix/login      -       active  640 MB  590 MB  5d   2h      dirty(1)
 
-1 merged · 1 active
+1 merged · 1 active  ·  1.7 GB, 1.1 GB merged or empty
 
-Scanned 2 repositories in 300ms; 2 with linked worktrees. Roots: zap roots
+Scanned 2 repositories in 1.2s; 2 with linked worktrees. Roots: zap roots
+Linked worktrees use about 2.2 GB; 1.5 GB of that is in merged or empty ones.
 ```
 
 | Status | Meaning |
@@ -69,6 +71,11 @@ AGENT is guessed from the folder a worktree lives in (for example `.claude/workt
 `~/src`, `~/projects` and known agent worktree folders; `zap roots` changes that list.
 Add `--fetch` to `scan`, `explain` or `clean` to fetch remotes first, so pull requests merged on
 GitHub are seen.
+
+SIZE is what removing a worktree would free, measured like `du`; DEPS is the part of it in
+dependency and build folders such as `node_modules`, `.venv` and `target`. Hard-linked files
+(a pnpm store, for example) are not counted, because removing one link frees nothing;
+`zap explain` reports them as shared.
 
 ## Cleaning safely
 
