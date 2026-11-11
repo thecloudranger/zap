@@ -22,6 +22,7 @@ type Options struct {
 	AllRules bool           // run every check (explain) instead of stopping at the first match
 	Fetch    bool           // run `git fetch --all --prune` first
 	Sizer    *sizer.Counter // measure linked worktrees' disk use; nil skips it
+	GH       gitx.Runner    // the gh CLI for the pull request check; nil skips it
 	Rules    []verdict.Rule // nil means verdict.Default()
 }
 
@@ -66,7 +67,7 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	for i, wt := range repo.Worktrees {
 		g.Go(func() error {
-			s := &verdict.Subject{Git: git, Repo: repo, WT: wt, Target: target}
+			s := &verdict.Subject{Git: git, GH: opt.GH, Repo: repo, WT: wt, Target: target}
 			a := model.Assessment{Worktree: wt, Agent: agent.Detect(wt.Path), Verdict: verdict.Evaluate(gctx, s, rules, opt.AllRules)}
 			if !wt.Main { // the main worktree is never a candidate; its facts are not needed
 				a.Facts, a.Errors = facts(gctx, git, repo.CommonDir, wt)

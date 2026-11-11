@@ -16,10 +16,10 @@ import (
 
 // runPicker is `zap` with no subcommand on a terminal: plan, let the user choose in the
 // picker, then confirm the disclaimer and apply exactly what was chosen.
-func runPicker(cmd *cobra.Command, d Deps, all bool) error {
+func runPicker(cmd *cobra.Command, d Deps, all, gh bool) error {
 	out := cmd.OutOrStdout()
 	cwd, _ := d.Getwd()
-	fl := cleanFlags{all: all}
+	fl := cleanFlags{all: all, gh: gh}
 	plans, warnings, err := buildPlans(cmd, d, nil, fl, cwd)
 	if !all && errors.Is(err, gitx.ErrNotRepo) {
 		fl.all = true // outside a repository: every repository under the scan roots
@@ -40,7 +40,7 @@ func runPicker(cmd *cobra.Command, d Deps, all bool) error {
 		if _, err := writeZap(repo); err != nil {
 			return plan.Plan{}, err
 		}
-		return plan.Build(cmd.Context(), d.Git, repo, plan.Options{Now: d.Now(), Cwd: cwd, Sizer: sizer.NewCounter()})
+		return plan.Build(cmd.Context(), d.Git, repo, plan.Options{Now: d.Now(), Cwd: cwd, Sizer: sizer.NewCounter(), GH: ghRunner(gh)})
 	}
 	picker := tui.New(plans, d.Home, optIn)
 	prog := tea.NewProgram(picker, tea.WithContext(cmd.Context()), tea.WithInput(d.In), tea.WithOutput(d.Out))

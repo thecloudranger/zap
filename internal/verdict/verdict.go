@@ -4,8 +4,10 @@ package verdict
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/thecloudranger/zap/internal/gitx"
@@ -15,6 +17,7 @@ import (
 // Subject is what a check looks at.
 type Subject struct {
 	Git    gitx.Runner
+	GH     gitx.Runner // the gh CLI; nil skips the pull request check
 	Repo   model.Repo
 	WT     model.Worktree
 	Target model.Target
@@ -56,6 +59,7 @@ func MergeRules() []Rule {
 		{EmptyDiff{}, model.StatusMerged},
 		{Cherry{}, model.StatusMerged},
 		{Squash{}, model.StatusMerged},
+		{PullRequest{}, model.StatusMerged},
 	}
 }
 
@@ -203,6 +207,48 @@ func (Squash) Eval(ctx context.Context, s *Subject) model.CheckResult {
 	return eachRef(s, func(ref string) (bool, error) {
 		return gitx.MergeAddsNothing(ctx, s.Git, s.Repo.Root, ref, s.head())
 	}, "merging %s into %s would change nothing", "merging %s into %s would add changes")
+}
+
+// PullRequest matches when GitHub has a merged pull request into the target whose head
+// commit is exactly the branch tip: commits added after the merge mean no match.
+type PullRequest struct{}
+
+// Name implements Check.
+func (PullRequest) Name() string { return "pr" }
+
+// Eval implements Check.
+func (PullRequest) Eval(ctx context.Context, s *Subject) model.CheckResult {
+	switch {
+	case s.GH == nil:
+		return model.CheckResult{Outcome: model.Skipped, Detail: "not asked (use --gh)"}
+	case s.WT.Branch == "":
+		return model.CheckResult{Outcome: model.Skipped, Detail: "detached HEAD, no branch"}
+	}
+	out, err := s.GH.Run(ctx, s.Repo.Root, "pr", "list", "--state", "merged", "--head", s.WT.Branch,
+		"--json", "number,headRefOid,baseRefName", "--limit", "20")
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return model.CheckResult{Outcome: model.Skipped, Detail: "gh is not installed"}
+		}
+		return errResult(err)
+	}
+	var prs []struct {
+		Number      int    `json:"number"`
+		HeadRefOid  string `json:"headRefOid"`
+		BaseRefName string `json:"baseRefName"`
+	}
+	if err := json.Unmarshal(out, &prs); err != nil {
+		return errResult(fmt.Errorf("verdict: parse gh output: %w", err))
+	}
+	for _, pr := range prs {
+		if pr.HeadRefOid == s.WT.Head && pr.BaseRefName == s.Target.Name {
+			return model.CheckResult{Outcome: model.Match, Detail: fmt.Sprintf("pull request #%d into %s was merged at this commit", pr.Number, pr.BaseRefName)}
+		}
+	}
+	if len(prs) > 0 {
+		return model.CheckResult{Outcome: model.NoMatch, Detail: fmt.Sprintf("merged pull request #%d is not at the branch tip or not into %s", prs[0].Number, s.Target.Name)}
+	}
+	return model.CheckResult{Outcome: model.NoMatch, Detail: "no merged pull request for " + s.WT.Branch}
 }
 
 // Gone matches when the branch tracked a remote branch that has been deleted, which

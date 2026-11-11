@@ -3,6 +3,8 @@ package verdict
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -91,7 +93,7 @@ func TestEvaluate(t *testing.T) {
 				mtOrigin:     no,
 				featUpstream: "origin/feat\x00\n",
 			},
-			false, model.StatusActive, 7,
+			false, model.StatusActive, 8,
 		},
 		{
 			"git error never counts as merged",
@@ -108,7 +110,7 @@ func TestEvaluate(t *testing.T) {
 				mtOrigin:     &gitx.CmdError{Code: 128},
 				featUpstream: &gitx.CmdError{Code: 128},
 			},
-			false, model.StatusActive, 7,
+			false, model.StatusActive, 8,
 		},
 		{
 			"never-moved branch is empty, not merged",
@@ -128,7 +130,7 @@ func TestEvaluate(t *testing.T) {
 				"merge-tree --write-tree --no-messages refs/heads/main abcdef1234": "t1\n",
 				"rev-parse --verify refs/heads/main^{tree}":                        "t1\n",
 			},
-			true, model.StatusEmpty, 7,
+			true, model.StatusEmpty, 8,
 		},
 		{
 			"detached that moved and is on target is merged",
@@ -166,7 +168,7 @@ func TestEvaluate(t *testing.T) {
 				mtMain:       &gitx.CmdError{Code: 129},
 				featUpstream: "origin/feat\x00[gone]\n",
 			},
-			false, model.StatusGone, 7,
+			false, model.StatusGone, 8,
 		},
 		{
 			"missing reflog falls through to merge checks",
@@ -205,4 +207,26 @@ func TestErroredCheckIsReported(t *testing.T) {
 	res := Ancestor{}.Eval(t.Context(), subject(g, model.Worktree{Head: "abc", Branch: "feat"}))
 	assert.Equal(t, model.Errored, res.Outcome)
 	assert.Contains(t, res.Detail, "bad object")
+}
+
+func TestPullRequest(t *testing.T) {
+	const tip = "abcdef1234567890"
+	wt := model.Worktree{Head: tip, Branch: "feat"}
+	call := "pr list --state merged --head feat --json number,headRefOid,baseRefName --limit 20"
+	eval := func(gh fakeGit) model.CheckResult {
+		s := subject(fakeGit{}, wt)
+		if gh != nil {
+			s.GH = gh
+		}
+		return PullRequest{}.Eval(t.Context(), s)
+	}
+	assert.Equal(t, model.Skipped, eval(nil).Outcome, "off unless asked")
+	assert.Equal(t, model.Match, eval(fakeGit{call: `[{"number":7,"headRefOid":"` + tip + `","baseRefName":"main"}]`}).Outcome)
+	r := eval(fakeGit{call: `[{"number":7,"headRefOid":"0000000","baseRefName":"main"}]`})
+	assert.Equal(t, model.NoMatch, r.Outcome, "commits were added after the merge")
+	assert.Contains(t, r.Detail, "#7")
+	assert.Equal(t, model.NoMatch, eval(fakeGit{call: `[{"number":8,"headRefOid":"` + tip + `","baseRefName":"release"}]`}).Outcome, "merged elsewhere")
+	assert.Equal(t, model.NoMatch, eval(fakeGit{call: `[]`}).Outcome)
+	assert.Equal(t, model.Skipped, eval(fakeGit{call: fmt.Errorf("gitx: %w", exec.ErrNotFound)}).Outcome)
+	assert.Equal(t, model.Errored, eval(fakeGit{call: &gitx.CmdError{Code: 1, Stderr: "auth required"}}).Outcome)
 }

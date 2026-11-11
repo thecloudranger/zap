@@ -28,8 +28,8 @@ type ScanResult struct {
 }
 
 type scanFlags struct {
-	asJSON, fetch, all, noSize bool
-	target                     string
+	asJSON, fetch, all, noSize, gh bool
+	target                         string
 }
 
 func newScanCmd(d Deps) *cobra.Command {
@@ -65,6 +65,7 @@ func newScanCmd(d Deps) *cobra.Command {
 	f.BoolVar(&fl.fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
 	f.BoolVarP(&fl.all, "all", "a", false, "scan every repository under the scan roots")
 	f.BoolVar(&fl.noSize, "no-size", false, "skip measuring disk use (faster)")
+	f.BoolVar(&fl.gh, "gh", false, "also ask GitHub (gh CLI) for merged pull requests")
 	return cmd
 }
 
@@ -83,6 +84,7 @@ func scan(cmd *cobra.Command, d Deps, args []string, fl scanFlags) (ScanResult, 
 	if !fl.noSize {
 		opt.Sizer = sizer.NewCounter()
 	}
+	opt.GH = ghRunner(fl.gh)
 	if !fl.all {
 		dir, err := targetDir(d, args)
 		if err != nil {
@@ -214,4 +216,12 @@ func (p *progress) done() {
 	if p.printed {
 		_, _ = fmt.Fprint(p.cmd.ErrOrStderr(), "\r\033[K")
 	}
+}
+
+// ghRunner returns the gh CLI runner when asked for, else nil (check skipped).
+func ghRunner(on bool) gitx.Runner {
+	if !on {
+		return nil
+	}
+	return gitx.Exec{Bin: "gh"}
 }

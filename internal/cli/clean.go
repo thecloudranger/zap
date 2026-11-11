@@ -25,8 +25,8 @@ type CleanResult struct {
 }
 
 type cleanFlags struct {
-	dryRun, yes, asJSON, fetch, all, unlockStale bool
-	target                                       string
+	dryRun, yes, asJSON, fetch, all, unlockStale, gh bool
+	target                                           string
 }
 
 const disclaimer = `Before zap deletes anything, please read this once:
@@ -84,6 +84,7 @@ func newCleanCmd(d Deps) *cobra.Command {
 	f.BoolVar(&fl.fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
 	f.BoolVarP(&fl.all, "all", "a", false, "every opted-in repository under the scan roots")
 	f.BoolVar(&fl.unlockStale, "unlock-stale", false, "release locks whose recorded pid is no longer running")
+	f.BoolVar(&fl.gh, "gh", false, "also ask GitHub (gh CLI) for merged pull requests")
 	return cmd
 }
 
@@ -168,7 +169,7 @@ func applyAndReport(cmd *cobra.Command, d Deps, plans []plan.Plan, warnings []st
 // warning in --all mode.
 func buildPlans(cmd *cobra.Command, d Deps, args []string, fl cleanFlags, cwd string) ([]plan.Plan, []string, error) {
 	opt := plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd, Sizer: sizer.NewCounter(),
-		UnlockStale: fl.unlockStale}
+		UnlockStale: fl.unlockStale, GH: ghRunner(fl.gh)}
 	if !fl.all {
 		dir, err := targetDir(d, args)
 		if err != nil {

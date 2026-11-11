@@ -72,6 +72,7 @@ type Options struct {
 	Procs func(context.Context) ([]procs.Proc, error)
 	// UnlockStale releases locks whose recorded pid is no longer running.
 	UnlockStale bool
+	GH          gitx.Runner // the gh CLI for the pull request check; nil skips it
 }
 
 // Build inspects the repository containing dir and plans its cleanup.
@@ -92,7 +93,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 		target = pol.Target
 	}
 	running := snapshot(ctx, opt.Procs) // before zap starts git processes of its own
-	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch, Sizer: opt.Sizer})
+	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch, Sizer: opt.Sizer, GH: opt.GH})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -158,7 +159,7 @@ func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a mode
 		it.Action = Remove
 	}
 	it.Unlock = it.Action != Keep && a.Locked
-	it.DeleteBranch, it.BranchNote = branchDecision(ctx, git, rep, a, pol)
+	it.DeleteBranch, it.BranchNote = branchDecision(ctx, git, opt.GH, rep, a, pol)
 	return it
 }
 
@@ -173,7 +174,7 @@ func firstFailure(rs []model.CheckResult) string {
 
 // branchDecision deletes a branch only when its work is provably safe: the status
 // already says so (merged, empty), or, for a missing worktree, a merge check matches.
-func branchDecision(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo) (bool, string) {
+func branchDecision(ctx context.Context, git, gh gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo) (bool, string) {
 	switch {
 	case a.Branch == "":
 		return false, ""
@@ -182,7 +183,7 @@ func branchDecision(ctx context.Context, git gitx.Runner, rep model.RepoReport, 
 	case a.Verdict.Status == model.StatusMerged || a.Verdict.Status == model.StatusEmpty:
 		return true, ""
 	}
-	s := &verdict.Subject{Git: git, Repo: model.Repo{Root: rep.Root}, WT: a.Worktree, Target: rep.Target}
+	s := &verdict.Subject{Git: git, GH: gh, Repo: model.Repo{Root: rep.Root}, WT: a.Worktree, Target: rep.Target}
 	s.WT.Prunable = false // judge the branch, not the folder
 	v := verdict.Evaluate(ctx, s, verdict.MergeRules(), false)
 	if v.Status == model.StatusMerged || v.Status == model.StatusEmpty {

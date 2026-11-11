@@ -28,8 +28,8 @@ type ExplainResult struct {
 
 func newExplainCmd(d Deps) *cobra.Command {
 	var (
-		asJSON, fetch bool
-		target        string
+		asJSON, fetch, gh bool
+		target            string
 	)
 	cmd := &cobra.Command{
 		Use:   "explain PATH",
@@ -39,7 +39,7 @@ func newExplainCmd(d Deps) *cobra.Command {
 		Args: usageArgs(cobra.ExactArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			res, err := explain(cmd, d, args[0], target, fetch)
+			res, err := explain(cmd, d, args[0], target, fetch, gh)
 			if asJSON {
 				if err != nil {
 					return writeErr(out, "explain", err)
@@ -55,10 +55,11 @@ func newExplainCmd(d Deps) *cobra.Command {
 	cmd.Flags().BoolVar(&asJSON, "json", false, "output a JSON envelope on stdout")
 	cmd.Flags().StringVar(&target, "target", "", "branch that counts as merged-into (default: origin/HEAD, main, master)")
 	cmd.Flags().BoolVar(&fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
+	cmd.Flags().BoolVar(&gh, "gh", false, "also ask GitHub (gh CLI) for merged pull requests")
 	return cmd
 }
 
-func explain(cmd *cobra.Command, d Deps, arg, target string, fetch bool) (ExplainResult, error) {
+func explain(cmd *cobra.Command, d Deps, arg, target string, fetch, gh bool) (ExplainResult, error) {
 	path, err := filepath.Abs(arg)
 	if err != nil {
 		return ExplainResult{}, err
@@ -75,7 +76,7 @@ func explain(cmd *cobra.Command, d Deps, arg, target string, fetch bool) (Explai
 			return ExplainResult{}, fmt.Errorf("cli: working directory: %w", err)
 		}
 	}
-	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target, AllRules: true, Fetch: fetch, Sizer: sizer.NewCounter()})
+	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target, AllRules: true, Fetch: fetch, Sizer: sizer.NewCounter(), GH: ghRunner(gh)})
 	if err != nil {
 		return ExplainResult{}, err
 	}

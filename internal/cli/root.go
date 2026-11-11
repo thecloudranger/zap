@@ -63,7 +63,7 @@ func stateDir(home string) string {
 
 // NewRoot builds the zap command tree.
 func NewRoot(d Deps) *cobra.Command {
-	var all bool
+	var all, gh bool
 	root := &cobra.Command{
 		Use:           "zap",
 		Short:         "Find and zap stale git worktrees left behind by agents and humans",
@@ -77,10 +77,11 @@ func NewRoot(d Deps) *cobra.Command {
 			if !d.IsTTY() {
 				return cmd.Help()
 			}
-			return runPicker(cmd, d, all)
+			return runPicker(cmd, d, all, gh)
 		},
 	}
 	root.Flags().BoolVarP(&all, "all", "a", false, "pick from every repository under the scan roots")
+	root.Flags().BoolVar(&gh, "gh", false, "also ask GitHub (gh CLI) for merged pull requests")
 	root.SetIn(d.In)
 	root.SetOut(d.Out)
 	root.SetErr(d.Err)
