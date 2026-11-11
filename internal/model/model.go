@@ -51,6 +51,7 @@ const (
 	StatusMissing Status = "missing" // registered but its folder is gone
 	StatusEmpty   Status = "empty"   // never got a commit of its own
 	StatusMerged  Status = "merged"  // its work is already in the target
+	StatusGone    Status = "gone"    // its upstream branch was deleted on the remote
 	StatusActive  Status = "active"  // anything else
 )
 
@@ -104,4 +105,5 @@ type RepoReport struct {
 	CommonDir string       `json:"commonDir,omitempty"`
 	Target    Target       `json:"target"`
 	Worktrees []Assessment `json:"worktrees"`
+	Warnings  []string     `json:"warnings,omitempty"`
 }

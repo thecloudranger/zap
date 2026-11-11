@@ -49,11 +49,13 @@ type Plan struct {
 	Policy      policy.Repo  `json:"policy"`
 	Items       []Item       `json:"items"`
 	ActiveCount int          `json:"activeCount"` // worktrees that are not candidates at all
+	Warnings    []string     `json:"warnings,omitempty"`
 }
 
 // Options control Build.
 type Options struct {
 	Target string // overrides .zap target
+	Fetch  bool   // fetch remotes before deciding
 	Now    time.Time
 	Cwd    string
 	Gates  []safety.Gate // nil means safety.Default()
@@ -76,7 +78,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 	if target == "" {
 		target = pol.Target
 	}
-	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target})
+	rep, err := inspect.Repo(ctx, git, repo.Root, inspect.Options{Target: target, Fetch: opt.Fetch})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -84,7 +86,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 	if gates == nil {
 		gates = safety.Default()
 	}
-	p := Plan{Repo: rep.Root, CommonDir: rep.CommonDir, Target: rep.Target, OptedIn: found, Policy: pol}
+	p := Plan{Repo: rep.Root, CommonDir: rep.CommonDir, Target: rep.Target, OptedIn: found, Policy: pol, Warnings: rep.Warnings}
 	for _, a := range rep.Worktrees {
 		if a.Main {
 			continue
@@ -138,7 +140,7 @@ func branchDecision(ctx context.Context, git gitx.Runner, rep model.RepoReport, 
 	}
 	s := &verdict.Subject{Git: git, Repo: model.Repo{Root: rep.Root}, WT: a.Worktree, Target: rep.Target}
 	s.WT.Prunable = false // judge the branch, not the folder
-	v := verdict.Evaluate(ctx, s, verdict.Default()[1:], false)
+	v := verdict.Evaluate(ctx, s, verdict.MergeRules(), false)
 	if v.Status == model.StatusMerged || v.Status == model.StatusEmpty {
 		return true, ""
 	}

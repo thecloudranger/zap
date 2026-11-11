@@ -23,8 +23,8 @@ type CleanResult struct {
 }
 
 type cleanFlags struct {
-	dryRun, yes, asJSON bool
-	target              string
+	dryRun, yes, asJSON, fetch bool
+	target                     string
 }
 
 const disclaimer = `Before zap deletes anything, please read this once:
@@ -74,6 +74,7 @@ func newCleanCmd(d Deps) *cobra.Command {
 	f.BoolVarP(&fl.yes, "yes", "y", false, "do not ask for confirmation (required when not on a terminal)")
 	f.BoolVar(&fl.asJSON, "json", false, "output a JSON envelope on stdout")
 	f.StringVar(&fl.target, "target", "", "branch that counts as merged-into (overrides .zap)")
+	f.BoolVar(&fl.fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
 	return cmd
 }
 
@@ -84,14 +85,14 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		return err
 	}
 	cwd, _ := d.Getwd()
-	p, err := plan.Build(cmd.Context(), d.Git, dir, plan.Options{Target: fl.target, Now: d.Now(), Cwd: cwd})
+	p, err := plan.Build(cmd.Context(), d.Git, dir, plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd})
 	if err != nil {
 		return err
 	}
 	toZap, _ := p.Counts()
 	if fl.dryRun || !p.OptedIn || toZap == 0 {
 		if fl.asJSON {
-			return writeOK(out, "clean", CleanResult{DryRun: true, Plan: p, Results: []plan.Result{}})
+			return writeJSON(out, Envelope{Command: "clean", Status: "ok", Data: CleanResult{DryRun: true, Plan: p, Results: []plan.Result{}}, Warnings: p.Warnings})
 		}
 		renderPlan(out, p, d.Home)
 		if fl.dryRun && toZap > 0 {
@@ -177,6 +178,9 @@ func renderPlan(w io.Writer, p plan.Plan, home string) {
 	optIn := "opted in (.zap)"
 	if !p.OptedIn {
 		optIn = "not opted in: run `zap init` to allow cleaning"
+	}
+	for _, warn := range p.Warnings {
+		_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
 	}
 	_, _ = fmt.Fprintf(w, "%s  ·  target %s  ·  %s\n\n", tildify(p.Repo, home), p.Target.Name, optIn)
 	if len(p.Items) == 0 {

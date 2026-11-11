@@ -32,9 +32,14 @@ func (f fakeGit) Run(_ context.Context, _ string, args ...string) ([]byte, error
 }
 
 const (
-	featReflog = "reflog show --format=%H refs/heads/feat --"
-	headReflog = "reflog show --format=%H HEAD --"
-	moved      = "abcdef1234\n1111111111\n"
+	featUpstream = "for-each-ref --format=%(upstream:short)%00%(upstream:track) refs/heads/feat"
+	cherryMain   = "cherry refs/heads/main refs/heads/feat"
+	cherryOrigin = "cherry refs/remotes/origin/main refs/heads/feat"
+	mtMain       = "merge-tree --write-tree --no-messages refs/heads/main refs/heads/feat"
+	mtOrigin     = "merge-tree --write-tree --no-messages refs/remotes/origin/main refs/heads/feat"
+	featReflog   = "reflog show --format=%H refs/heads/feat --"
+	headReflog   = "reflog show --format=%H HEAD --"
+	moved        = "abcdef1234\n1111111111\n"
 )
 
 var no = &gitx.CmdError{Code: 1}
@@ -80,8 +85,13 @@ func TestEvaluate(t *testing.T) {
 				"merge-base --is-ancestor refs/heads/feat refs/remotes/origin/main": no,
 				"diff --quiet refs/heads/main...refs/heads/feat --":                 no,
 				"diff --quiet refs/remotes/origin/main...refs/heads/feat --":        no,
+				cherryMain:   "+ abcdef1234\n",
+				cherryOrigin: "+ abcdef1234\n",
+				mtMain:       no, // conflicts
+				mtOrigin:     no,
+				featUpstream: "origin/feat\x00\n",
 			},
-			false, model.StatusActive, 4,
+			false, model.StatusActive, 7,
 		},
 		{
 			"git error never counts as merged",
@@ -92,8 +102,13 @@ func TestEvaluate(t *testing.T) {
 				"merge-base --is-ancestor refs/heads/feat refs/remotes/origin/main": &gitx.CmdError{Code: 128},
 				"diff --quiet refs/heads/main...refs/heads/feat --":                 &gitx.CmdError{Code: 128},
 				"diff --quiet refs/remotes/origin/main...refs/heads/feat --":        &gitx.CmdError{Code: 128},
+				cherryMain:   &gitx.CmdError{Code: 128},
+				cherryOrigin: &gitx.CmdError{Code: 128},
+				mtMain:       &gitx.CmdError{Code: 128},
+				mtOrigin:     &gitx.CmdError{Code: 128},
+				featUpstream: &gitx.CmdError{Code: 128},
 			},
-			false, model.StatusActive, 4,
+			false, model.StatusActive, 7,
 		},
 		{
 			"never-moved branch is empty, not merged",
@@ -106,10 +121,14 @@ func TestEvaluate(t *testing.T) {
 			model.Worktree{Path: "/c", Head: "abcdef1234", Detached: true},
 			fakeGit{
 				headReflog: "abcdef1234\n",
-				"merge-base --is-ancestor abcdef1234 refs/heads/main": nil,
-				"diff --quiet refs/heads/main...abcdef1234 --":        nil,
+				"merge-base --is-ancestor abcdef1234 refs/heads/main":              nil,
+				"diff --quiet refs/heads/main...abcdef1234 --":                     nil,
+				"cherry refs/heads/main abcdef1234":                                "",
+				"cherry refs/remotes/origin/main abcdef1234":                       "",
+				"merge-tree --write-tree --no-messages refs/heads/main abcdef1234": "t1\n",
+				"rev-parse --verify refs/heads/main^{tree}":                        "t1\n",
 			},
-			true, model.StatusEmpty, 4,
+			true, model.StatusEmpty, 7,
 		},
 		{
 			"detached that moved and is on target is merged",
@@ -119,6 +138,35 @@ func TestEvaluate(t *testing.T) {
 				"merge-base --is-ancestor abcdef1234 refs/heads/main": nil,
 			},
 			false, model.StatusMerged, 3,
+		},
+		{
+			"rebase merge: every patch already in target",
+			feat,
+			fakeGit{
+				featReflog: moved,
+				"merge-base --is-ancestor refs/heads/feat refs/heads/main":          no,
+				"merge-base --is-ancestor refs/heads/feat refs/remotes/origin/main": no,
+				"diff --quiet refs/heads/main...refs/heads/feat --":                 no,
+				"diff --quiet refs/remotes/origin/main...refs/heads/feat --":        no,
+				cherryMain: "- abcdef1234\n- 2222222222\n",
+			},
+			false, model.StatusMerged, 5,
+		},
+		{
+			"squash merge: merging adds nothing; old git skips the check",
+			feat,
+			fakeGit{
+				featReflog: moved,
+				"merge-base --is-ancestor refs/heads/feat refs/heads/main":          no,
+				"merge-base --is-ancestor refs/heads/feat refs/remotes/origin/main": no,
+				"diff --quiet refs/heads/main...refs/heads/feat --":                 no,
+				"diff --quiet refs/remotes/origin/main...refs/heads/feat --":        no,
+				cherryMain:   "+ abcdef1234\n",
+				cherryOrigin: "+ abcdef1234\n",
+				mtMain:       &gitx.CmdError{Code: 129},
+				featUpstream: "origin/feat\x00[gone]\n",
+			},
+			false, model.StatusGone, 7,
 		},
 		{
 			"missing reflog falls through to merge checks",
@@ -138,6 +186,15 @@ func TestEvaluate(t *testing.T) {
 			assert.NotEmpty(t, v.Reason)
 		})
 	}
+}
+
+func TestSquashMatchesOnEqualTree(t *testing.T) {
+	g := fakeGit{
+		mtMain: "t9\n",
+		"rev-parse --verify refs/heads/main^{tree}": "t9\n",
+	}
+	res := Squash{}.Eval(t.Context(), subject(g, model.Worktree{Head: "abcdef1234", Branch: "feat"}))
+	assert.Equal(t, model.Match, res.Outcome, res.Detail)
 }
 
 func TestErroredCheckIsReported(t *testing.T) {

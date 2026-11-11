@@ -24,7 +24,10 @@ const FileName = ".zap"
 var ErrInvalid = errors.New("invalid .zap")
 
 // Statuses that a .zap may list in rules.
-var ruleStatuses = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing}
+var ruleStatuses = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing, model.StatusGone}
+
+// defaultRules leave out "gone": a deleted upstream does not prove the work landed.
+var defaultRules = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing}
 
 // Repo is the content of a .zap file.
 type Repo struct {
@@ -39,7 +42,7 @@ type Repo struct {
 func Defaults() Repo {
 	yes := true
 	return Repo{
-		Rules:        slices.Clone(ruleStatuses),
+		Rules:        slices.Clone(defaultRules),
 		MinAge:       Duration(24 * time.Hour),
 		DeleteBranch: &yes,
 		Protect:      []string{"main", "master"},
@@ -127,7 +130,9 @@ const Template = `# zap opt-in file. With this file present, zap may remove work
 # Branch that "merged" is measured against (default: origin/HEAD, then main, then master).
 # target = "main"
 
-# Which statuses zap may remove: "merged", "empty", "missing".
+# Which statuses zap may remove: "merged", "empty", "missing", and optionally "gone"
+# (its remote branch was deleted). For "gone", the worktree is removed but the branch
+# is kept unless its work is in the target.
 rules = ["merged", "empty", "missing"]
 
 # Never touch a worktree with activity more recent than this (units: m, h, d, w).

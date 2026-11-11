@@ -13,6 +13,9 @@ import (
 
 func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 	for _, rep := range res.Repos {
+		for _, warn := range rep.Warnings {
+			_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
+		}
 		linked := linkedOf(rep)
 		_, _ = fmt.Fprintf(w, "%s  ·  %d linked worktree%s  ·  target %s\n\n",
 			tildify(rep.Root, home), len(linked), plural(len(linked)), rep.Target.Name)
@@ -50,7 +53,7 @@ func summaryLine(as []model.Assessment) string {
 		counts[a.Verdict.Status]++
 	}
 	var parts []string
-	for _, s := range []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing, model.StatusActive} {
+	for _, s := range []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusGone, model.StatusMissing, model.StatusActive} {
 		if counts[s] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[s], s))
 		}

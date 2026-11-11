@@ -233,3 +233,83 @@ func RemoveAdmin(commonDir, wtPath string) error {
 	}
 	return nil
 }
+
+// CherryAllApplied reports whether every commit of head that is not in target has an
+// equivalent patch in target (`git cherry` marks them "-"): a rebase or cherry-pick merge.
+// With no commits outside target it is trivially true.
+func CherryAllApplied(ctx context.Context, r Runner, dir, target, head string) (bool, error) {
+	out, err := r.Run(ctx, dir, "cherry", target, head)
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Fields(string(out))
+	for i := 0; i+1 < len(lines); i += 2 {
+		if lines[i] != "-" {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// ErrUnsupported is returned when the installed git lacks a needed feature.
+var ErrUnsupported = errors.New("not supported by this git version")
+
+// MergeAddsNothing reports whether merging head into target would leave target's tree
+// unchanged: head's changes are already there, as after a squash merge.
+// Needs git 2.38+ (merge-tree --write-tree).
+func MergeAddsNothing(ctx context.Context, r Runner, dir, target, head string) (bool, error) {
+	out, err := r.Run(ctx, dir, "merge-tree", "--write-tree", "--no-messages", target, head)
+	switch code := ExitCode(err); {
+	case err == nil:
+	case code == 1:
+		return false, nil // conflicts: head has changes target does not
+	case code == 129:
+		return false, fmt.Errorf("gitx: merge-tree --write-tree: %w", ErrUnsupported)
+	default:
+		return false, err
+	}
+	merged, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	tree, err := r.Run(ctx, dir, "rev-parse", "--verify", target+"^{tree}")
+	if err != nil {
+		return false, err
+	}
+	return merged != "" && merged == strings.TrimSpace(string(tree)), nil
+}
+
+// UpstreamGone reports whether branch tracks an upstream that no longer exists,
+// e.g. the remote branch was deleted after its pull request was merged.
+func UpstreamGone(ctx context.Context, r Runner, dir, branch string) (upstream string, gone bool, err error) {
+	out, err := r.Run(ctx, dir, "for-each-ref", "--format=%(upstream:short)%00%(upstream:track)", "refs/heads/"+branch)
+	if err != nil {
+		return "", false, err
+	}
+	up, track, _ := strings.Cut(strings.TrimSpace(string(out)), "\x00")
+	return up, up != "" && track == "[gone]", nil
+}
+
+// Fetch updates all remotes and prunes deleted remote branches.
+func Fetch(ctx context.Context, r Runner, dir string) error {
+	_, err := r.Run(ctx, dir, "fetch", "--all", "--prune", "--quiet")
+	return err
+}
+
+// BranchExists reports whether refs/heads/<branch> exists.
+func BranchExists(ctx context.Context, r Runner, dir, branch string) bool {
+	return refExists(ctx, r, dir, "refs/heads/"+branch)
+}
+
+// CreateBranch creates branch at sha (fails if it exists).
+func CreateBranch(ctx context.Context, r Runner, dir, branch, sha string) error {
+	_, err := r.Run(ctx, dir, "branch", "--", branch, sha)
+	return err
+}
+
+// AddWorktree checks out branch at path, or sha detached when branch is empty.
+func AddWorktree(ctx context.Context, r Runner, dir, path, branch, sha string) error {
+	args := []string{"worktree", "add", "--quiet", path, branch}
+	if branch == "" {
+		args = []string{"worktree", "add", "--quiet", "--detach", path, sha}
+	}
+	_, err := r.Run(ctx, dir, args...)
+	return err
+}

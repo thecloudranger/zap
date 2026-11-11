@@ -129,3 +129,30 @@ func MergeOnRemote(t testing.TB, repo, branch string) {
 	Git(t, repo, "push", "-q", "origin", branch+":main")
 	Git(t, repo, "fetch", "-q", "origin")
 }
+
+// SquashMerge lands branch on main as one new commit, the way GitHub's
+// "Squash and merge" does.
+func SquashMerge(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "merge", "-q", "--squash", branch)
+	Git(t, repo, "commit", "-q", "-m", "Squashed "+branch)
+}
+
+// RebaseMerge replays branch's commits onto main as new commits, the way GitHub's
+// "Rebase and merge" does when main has moved on.
+func RebaseMerge(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "cherry-pick", "--allow-empty", "main.."+branch)
+}
+
+// PushTracking pushes branch from repo to origin and sets it as upstream.
+func PushTracking(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "push", "-q", "-u", "origin", branch)
+}
+
+// DeleteRemoteBranch deletes branch on origin, as GitHub does after a merge.
+func DeleteRemoteBranch(t testing.TB, repo, branch string) {
+	t.Helper()
+	Git(t, repo, "push", "-q", "origin", "--delete", branch)
+}

@@ -4,6 +4,7 @@ package verdict
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -41,11 +42,20 @@ type Rule struct {
 
 // Default is the chain used by scan and explain, cheapest first.
 func Default() []Rule {
+	rules := []Rule{{Missing{}, model.StatusMissing}}
+	rules = append(rules, MergeRules()...)
+	return append(rules, Rule{Gone{}, model.StatusGone})
+}
+
+// MergeRules are the checks that prove a branch's work is safe to drop: it has none,
+// or the target already contains it.
+func MergeRules() []Rule {
 	return []Rule{
-		{Missing{}, model.StatusMissing},
 		{Empty{}, model.StatusEmpty},
 		{Ancestor{}, model.StatusMerged},
 		{EmptyDiff{}, model.StatusMerged},
+		{Cherry{}, model.StatusMerged},
+		{Squash{}, model.StatusMerged},
 	}
 }
 
@@ -167,6 +177,58 @@ func (EmptyDiff) Eval(ctx context.Context, s *Subject) model.CheckResult {
 	}, "%s adds no changes over %s", "%s has changes not in %s")
 }
 
+// Cherry matches when every commit of the branch has an equivalent patch in the target:
+// a rebase merge or cherry-pick, where the commits were rewritten.
+type Cherry struct{}
+
+// Name implements Check.
+func (Cherry) Name() string { return "cherry" }
+
+// Eval implements Check.
+func (Cherry) Eval(ctx context.Context, s *Subject) model.CheckResult {
+	return eachRef(s, func(ref string) (bool, error) {
+		return gitx.CherryAllApplied(ctx, s.Git, s.Repo.Root, ref, s.head())
+	}, "every commit of %s has an equivalent patch in %s", "%s has commits whose patches are not in %s")
+}
+
+// Squash matches when merging the branch into the target would change nothing:
+// a squash merge, where the branch's changes landed as one new commit.
+type Squash struct{}
+
+// Name implements Check.
+func (Squash) Name() string { return "squash" }
+
+// Eval implements Check.
+func (Squash) Eval(ctx context.Context, s *Subject) model.CheckResult {
+	return eachRef(s, func(ref string) (bool, error) {
+		return gitx.MergeAddsNothing(ctx, s.Git, s.Repo.Root, ref, s.head())
+	}, "merging %s into %s would change nothing", "merging %s into %s would add changes")
+}
+
+// Gone matches when the branch tracked a remote branch that has been deleted, which
+// usually means its pull request was merged or closed. It does not prove the work landed.
+type Gone struct{}
+
+// Name implements Check.
+func (Gone) Name() string { return "gone" }
+
+// Eval implements Check.
+func (Gone) Eval(ctx context.Context, s *Subject) model.CheckResult {
+	if s.WT.Branch == "" {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "detached HEAD, no upstream"}
+	}
+	up, gone, err := gitx.UpstreamGone(ctx, s.Git, s.Repo.Root, s.WT.Branch)
+	switch {
+	case err != nil:
+		return errResult(err)
+	case up == "":
+		return model.CheckResult{Outcome: model.NoMatch, Detail: "no upstream branch"}
+	case gone:
+		return model.CheckResult{Outcome: model.Match, Detail: "upstream " + up + " was deleted"}
+	}
+	return model.CheckResult{Outcome: model.NoMatch, Detail: "upstream " + up + " exists"}
+}
+
 // eachRef matches if test matches against any target ref. An error on one ref is
 // reported only when no other ref matched.
 func eachRef(s *Subject, test func(ref string) (bool, error), yes, no string) model.CheckResult {
@@ -176,6 +238,9 @@ func eachRef(s *Subject, test func(ref string) (bool, error), yes, no string) mo
 	var firstErr error
 	for _, ref := range s.Target.Refs {
 		ok, err := test(ref)
+		if errors.Is(err, gitx.ErrUnsupported) {
+			return model.CheckResult{Outcome: model.Skipped, Detail: err.Error()}
+		}
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err

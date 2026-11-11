@@ -182,7 +182,7 @@ func TestExplain(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
 	assert.Equal(t, "merged", string(env.Data.Worktree.Verdict.Status))
-	assert.Len(t, env.Data.Worktree.Verdict.Checks, 4)
+	assert.Len(t, env.Data.Worktree.Verdict.Checks, 7)
 }
 
 func TestExplainMissingAndErrors(t *testing.T) {

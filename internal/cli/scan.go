@@ -17,8 +17,8 @@ type ScanResult struct {
 
 func newScanCmd(d Deps) *cobra.Command {
 	var (
-		asJSON bool
-		target string
+		asJSON, fetch bool
+		target        string
 	)
 	cmd := &cobra.Command{
 		Use:   "scan [PATH]",
@@ -26,12 +26,12 @@ func newScanCmd(d Deps) *cobra.Command {
 		Args:  usageArgs(cobra.MaximumNArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			res, err := scan(cmd, d, args, target)
+			res, err := scan(cmd, d, args, target, fetch)
 			if asJSON {
 				if err != nil {
 					return writeErr(out, "scan", err)
 				}
-				return writeOK(out, "scan", res)
+				return writeJSON(out, Envelope{Command: "scan", Status: "ok", Data: res, Warnings: res.warnings()})
 			}
 			if err != nil {
 				return err
@@ -41,15 +41,24 @@ func newScanCmd(d Deps) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "output a JSON envelope on stdout")
 	cmd.Flags().StringVar(&target, "target", "", "branch that counts as merged-into (default: origin/HEAD, main, master)")
+	cmd.Flags().BoolVar(&fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
 	return cmd
 }
 
-func scan(cmd *cobra.Command, d Deps, args []string, target string) (ScanResult, error) {
+func (r ScanResult) warnings() []string {
+	var w []string
+	for _, rep := range r.Repos {
+		w = append(w, rep.Warnings...)
+	}
+	return w
+}
+
+func scan(cmd *cobra.Command, d Deps, args []string, target string, fetch bool) (ScanResult, error) {
 	dir, err := targetDir(d, args)
 	if err != nil {
 		return ScanResult{}, err
 	}
-	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target})
+	rep, err := inspect.Repo(cmd.Context(), d.Git, dir, inspect.Options{Target: target, Fetch: fetch})
 	if err != nil {
 		return ScanResult{}, err
 	}

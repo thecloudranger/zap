@@ -18,6 +18,7 @@ import (
 type Options struct {
 	Target   string         // target branch override; empty resolves the default
 	AllRules bool           // run every check (explain) instead of stopping at the first match
+	Fetch    bool           // run `git fetch --all --prune` first
 	Rules    []verdict.Rule // nil means verdict.Default()
 }
 
@@ -29,6 +30,15 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 	}
 	if repo.CommonDir, err = gitx.CommonDir(ctx, git, repo.Root); err != nil {
 		return model.RepoReport{}, err
+	}
+	var warnings []string
+	if opt.Fetch {
+		if err := gitx.Fetch(ctx, git, repo.Root); err != nil {
+			if ctx.Err() != nil {
+				return model.RepoReport{}, ctx.Err()
+			}
+			warnings = append(warnings, "fetch failed, using the last fetched state: "+err.Error())
+		}
 	}
 	target, err := gitx.ResolveTarget(ctx, git, repo.Root, opt.Target)
 	if err != nil {
@@ -54,7 +64,7 @@ func Repo(ctx context.Context, git gitx.Runner, dir string, opt Options) (model.
 	if err := g.Wait(); err != nil {
 		return model.RepoReport{}, fmt.Errorf("inspect: %w", err)
 	}
-	return model.RepoReport{Root: repo.Root, CommonDir: repo.CommonDir, Target: target, Worktrees: out}, nil
+	return model.RepoReport{Root: repo.Root, CommonDir: repo.CommonDir, Target: target, Worktrees: out, Warnings: warnings}, nil
 }
 
 // facts gathers observations; failures are recorded rather than aborting the scan.
