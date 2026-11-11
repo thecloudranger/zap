@@ -115,6 +115,16 @@ func facts(ctx context.Context, git gitx.Runner, commonDir string, wt model.Work
 	} else {
 		f.LastCommit = t
 	}
+	if ign, err := gitx.IgnoredEntries(ctx, git, wt.Path); err != nil {
+		note("ignored files", err)
+	} else {
+		f.Ignored = ign
+	}
+	if n, err := gitx.HiddenChanges(ctx, git, wt.Path); err != nil {
+		note("index flags", err)
+	} else {
+		f.Hidden = n
+	}
 	newest, err := gitx.NewestFileTime(ctx, git, wt.Path)
 	if err != nil {
 		note("file times", err)

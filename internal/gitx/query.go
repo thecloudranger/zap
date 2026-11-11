@@ -313,3 +313,46 @@ func AddWorktree(ctx context.Context, r Runner, dir, path, branch, sha string) e
 	_, err := r.Run(ctx, dir, args...)
 	return err
 }
+
+// IgnoredEntries lists the ignored paths in a worktree as git reports them: an ignored
+// directory such as node_modules/ is one entry and is not descended into.
+func IgnoredEntries(ctx context.Context, r Runner, wt string) ([]string, error) {
+	out, err := r.Run(ctx, wt, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory")
+	if err != nil {
+		return nil, err
+	}
+	var entries []string
+	for _, f := range bytes.Split(out, []byte{0}) {
+		if len(f) > 0 {
+			entries = append(entries, string(f))
+		}
+	}
+	return entries, nil
+}
+
+// HiddenChanges counts files marked assume-unchanged, or skip-worktree outside a sparse
+// checkout: git status does not show changes to them.
+func HiddenChanges(ctx context.Context, r Runner, wt string) (int, error) {
+	out, err := r.Run(ctx, wt, "ls-files", "-v", "-z")
+	if err != nil {
+		return 0, err
+	}
+	sparse := false
+	if v, err := r.Run(ctx, wt, "config", "--bool", "core.sparseCheckout"); err == nil {
+		sparse = strings.TrimSpace(string(v)) == "true"
+	}
+	n := 0
+	for _, f := range bytes.Split(out, []byte{0}) {
+		if len(f) < 2 {
+			continue
+		}
+		tag := f[0]
+		switch {
+		case tag >= 'a' && tag <= 'z': // lowercase: assume-unchanged
+			n++
+		case tag == 'S' && !sparse:
+			n++
+		}
+	}
+	return n, nil
+}

@@ -76,3 +76,18 @@ func TestNotInUse(t *testing.T) {
 	assert.Equal(t, model.Fail, eval(&Procs{Err: procs.ErrUnavailable}, false).Outcome, "fail closed")
 	assert.Equal(t, model.Skipped, eval(&Procs{Err: procs.ErrUnavailable}, true).Outcome, "nothing to protect when the folder is gone")
 }
+
+func TestHiddenAndKeptIgnored(t *testing.T) {
+	p := policy.Defaults()
+	s := &Subject{Policy: p, A: model.Assessment{Facts: model.Facts{Ignored: []string{"node_modules/", ".env"}, Hidden: 2}}}
+	r := NoKeptIgnored{}.Eval(s)
+	assert.Equal(t, model.Fail, r.Outcome)
+	assert.Equal(t, "holds ignored .env, which would be lost", r.Detail)
+	assert.Equal(t, model.Fail, NoHiddenChanges{}.Eval(s).Outcome)
+
+	s.A.Facts = model.Facts{Ignored: []string{"a.key", "b.key", "c.key", "d.key"}}
+	assert.Contains(t, NoKeptIgnored{}.Eval(s).Detail, "and 1 more")
+	s.A.Facts = model.Facts{Ignored: []string{"node_modules/", "dist/"}}
+	assert.Equal(t, model.Pass, NoKeptIgnored{}.Eval(s).Outcome)
+	assert.Equal(t, model.Pass, NoHiddenChanges{}.Eval(s).Outcome)
+}

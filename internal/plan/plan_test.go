@@ -206,3 +206,26 @@ func TestWorktreeInUseIsKept(t *testing.T) {
 	assert.Contains(t, it.Refusal, "in use by sleep (pid "+pid+")")
 	assert.Equal(t, Remove, byPath(p)[f.empty].Action, "other worktrees are unaffected")
 }
+
+func TestIgnoredSecretsAndHiddenChangesKeepWorktrees(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	testkit.Commit(t, repo, ".gitignore", ".env\nnode_modules/\n", "ignore")
+	secret := mergedWT(t, repo, ".worktrees/secret", "secret")
+	deps := mergedWT(t, repo, ".worktrees/deps", "deps")
+	hidden := mergedWT(t, repo, ".worktrees/hidden", "hidden")
+	require.NoError(t, os.WriteFile(filepath.Join(secret, ".env"), []byte("TOKEN=x\n"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(deps, "node_modules", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(deps, "node_modules", "pkg", "i.js"), []byte("x"), 0o644))
+	testkit.Git(t, hidden, "update-index", "--assume-unchanged", "hidden.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(hidden, "hidden.txt"), []byte("edited but invisible\n"), 0o644))
+	optIn(t, repo, `min_age = "0"`)
+
+	p, err := Build(t.Context(), gitx.Exec{}, repo, Options{Now: time.Now()})
+	require.NoError(t, err)
+	items := byPath(p)
+	assert.Equal(t, Keep, items[secret].Action)
+	assert.Contains(t, items[secret].Refusal, "holds ignored .env")
+	assert.Equal(t, Remove, items[deps].Action, "rebuildable dependencies do not block removal: %s", items[deps].Refusal)
+	assert.Equal(t, Keep, items[hidden].Action, "status looks clean, but a change is hidden")
+	assert.Contains(t, items[hidden].Refusal, "assume-unchanged")
+}

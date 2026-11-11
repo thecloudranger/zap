@@ -36,6 +36,7 @@ type Repo struct {
 	MinAge       Duration       `toml:"min_age"`
 	DeleteBranch *bool          `toml:"delete_branch"`
 	Protect      []string       `toml:"protect"`
+	KeepIgnored  []string       `toml:"keep_ignored"`
 }
 
 // Defaults returns the rules used for any key a .zap leaves out.
@@ -46,6 +47,7 @@ func Defaults() Repo {
 		MinAge:       Duration(24 * time.Hour),
 		DeleteBranch: &yes,
 		Protect:      []string{"main", "master"},
+		KeepIgnored:  []string{".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"},
 	}
 }
 
@@ -94,14 +96,19 @@ func ParseRepo(data string) (Repo, error) {
 	if !md.IsDefined("protect") {
 		r.Protect = d.Protect
 	}
+	if !md.IsDefined("keep_ignored") {
+		r.KeepIgnored = d.KeepIgnored
+	}
 	for _, s := range r.Rules {
 		if !slices.Contains(ruleStatuses, s) {
 			return Repo{}, fmt.Errorf("%w: rules: unknown status %q (allowed: %v)", ErrInvalid, s, ruleStatuses)
 		}
 	}
-	for _, p := range r.Protect {
-		if _, err := filepath.Match(p, ""); err != nil {
-			return Repo{}, fmt.Errorf("%w: protect: bad pattern %q", ErrInvalid, p)
+	for key, pats := range map[string][]string{"protect": r.Protect, "keep_ignored": r.KeepIgnored} {
+		for _, p := range pats {
+			if _, err := filepath.Match(p, ""); err != nil {
+				return Repo{}, fmt.Errorf("%w: %s: bad pattern %q", ErrInvalid, key, p)
+			}
 		}
 	}
 	if r.MinAge < 0 {
@@ -143,6 +150,10 @@ delete_branch = true
 
 # Branches never removed (glob patterns).
 protect = ["main", "master"]
+
+# Keep a worktree that holds ignored files with these names: they are not in git, so
+# removing the worktree would lose them. Matched against file and folder names.
+keep_ignored = [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"]
 `
 
 // Duration is a time.Duration that also accepts d (days) and w (weeks) in TOML.
@@ -196,4 +207,19 @@ func FormatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm", d/time.Minute)
 	}
 	return d.String()
+}
+
+// KeptIgnored returns the ignored entries whose name matches keep_ignored.
+func (r Repo) KeptIgnored(entries []string) []string {
+	var hit []string
+	for _, e := range entries {
+		name := filepath.Base(strings.TrimSuffix(e, "/"))
+		for _, p := range r.KeepIgnored {
+			if ok, _ := filepath.Match(p, name); ok {
+				hit = append(hit, e)
+				break
+			}
+		}
+	}
+	return hit
 }

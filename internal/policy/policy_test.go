@@ -109,3 +109,15 @@ func TestFormatDuration(t *testing.T) {
 		assert.Equal(t, want, FormatDuration(d))
 	}
 }
+
+func TestKeptIgnored(t *testing.T) {
+	d := Defaults()
+	got := d.KeptIgnored([]string{"node_modules/", ".env", "config/.env.local", "certs/", "certs/tls.key", "dist/", ".env.example.bak"})
+	assert.Equal(t, []string{".env", "config/.env.local", "certs/tls.key", ".env.example.bak"}, got)
+
+	r, err := ParseRepo(`keep_ignored = []`)
+	require.NoError(t, err)
+	assert.Empty(t, r.KeptIgnored([]string{".env"}), "an empty list turns the check off")
+	_, err = ParseRepo(`keep_ignored = ["[bad"]`)
+	assert.ErrorIs(t, err, ErrInvalid)
+}

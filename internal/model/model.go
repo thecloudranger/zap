@@ -89,7 +89,9 @@ type Facts struct {
 	Created      time.Time `json:"created,omitzero"`
 	LastCommit   time.Time `json:"lastCommit,omitzero"`
 	LastActivity time.Time `json:"lastActivity,omitzero"`
-	Size         *Usage    `json:"size,omitempty"` // nil when not measured
+	Size         *Usage    `json:"size,omitempty"`    // nil when not measured
+	Ignored      []string  `json:"ignored,omitempty"` // ignored entries; directories end in /
+	Hidden       int       `json:"hidden,omitempty"`  // files git status is told not to show
 }
 
 // Usage is disk use in bytes. Total is what removing the folder would free: files with a

@@ -37,7 +37,8 @@ type Gate interface {
 
 // Default is the gate list used by clean.
 func Default() []Gate {
-	return []Gate{NotMain{}, Unprotected{}, Unlocked{}, Inspected{}, Clean{}, OldEnough{}, NotCwd{}, NotInUse{}}
+	return []Gate{NotMain{}, Unprotected{}, Unlocked{}, Inspected{}, Clean{}, NoHiddenChanges{},
+		NoKeptIgnored{}, OldEnough{}, NotCwd{}, NotInUse{}}
 }
 
 // Evaluate runs every gate. ok is true only if all pass.
@@ -214,4 +215,45 @@ func (NotInUse) Eval(s *Subject) model.CheckResult {
 		names = append(names, fmt.Sprintf("%s (pid %d)", p.Command, p.PID))
 	}
 	return fail("in use by %s", strings.Join(names, ", "))
+}
+
+// NoHiddenChanges refuses a worktree with files git status is told not to show
+// (assume-unchanged, or skip-worktree outside a sparse checkout): "clean" can't be trusted.
+type NoHiddenChanges struct{}
+
+// Name implements Gate.
+func (NoHiddenChanges) Name() string { return "no-hidden" }
+
+// Eval implements Gate.
+func (NoHiddenChanges) Eval(s *Subject) model.CheckResult {
+	if s.A.Prunable {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "folder is gone"}
+	}
+	if n := s.A.Facts.Hidden; n > 0 {
+		return fail("%d file(s) marked assume-unchanged or skip-worktree; git status hides their changes", n)
+	}
+	return pass("no files hidden from git status")
+}
+
+// NoKeptIgnored refuses a worktree holding ignored files that match keep_ignored, such
+// as .env or keys: they are not in git, so removing the worktree would lose them.
+type NoKeptIgnored struct{}
+
+// Name implements Gate.
+func (NoKeptIgnored) Name() string { return "keep-ignored" }
+
+// Eval implements Gate.
+func (NoKeptIgnored) Eval(s *Subject) model.CheckResult {
+	if s.A.Prunable {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "folder is gone"}
+	}
+	hit := s.Policy.KeptIgnored(s.A.Facts.Ignored)
+	if len(hit) == 0 {
+		return pass("no ignored files matching keep_ignored")
+	}
+	shown := hit
+	if len(shown) > 3 {
+		shown = append(shown[:3:3], fmt.Sprintf("and %d more", len(hit)-3))
+	}
+	return fail("holds ignored %s, which would be lost", strings.Join(shown, ", "))
 }
