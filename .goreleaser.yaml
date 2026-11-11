@@ -1,0 +1,55 @@
+version: 2
+
+project_name: zap
+
+builds:
+  - id: zap
+    main: ./cmd/zap
+    binary: zap
+    env:
+      - CGO_ENABLED=0 # static binaries: no libc dependency, so they also run on Android (Termux)
+    flags:
+      - -trimpath
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/thecloudranger/zap/internal/version.Version={{ .Version }}
+      - -X github.com/thecloudranger/zap/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/thecloudranger/zap/internal/version.Date={{ .Date }}
+
+archives:
+  - id: zap
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+# Release notes come from CHANGELOG.md (see .github/workflows/release.yml).
+changelog:
+  disable: true
+
+homebrew_casks:
+  - name: zap
+    repository:
+      owner: thecloudranger
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    # Without a tap token (local snapshots, or before the tap exists) the cask is not uploaded.
+    skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_TOKEN" "" }}false{{ else }}true{{ end }}'
+    homepage: https://github.com/thecloudranger/zap
+    description: Find stale git worktrees and remove them safely
+    license: MIT
+    binaries: [zap]
+    hooks:
+      post:
+        # The binary is not notarized; clear the download quarantine so macOS runs it.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/zap"]
+          end
