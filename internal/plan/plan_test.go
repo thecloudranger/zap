@@ -257,3 +257,32 @@ func TestStaleLockReleasedOnlyWhenAsked(t *testing.T) {
 	assert.Equal(t, Zapped, res[0].Outcome, res[0].Detail)
 	assert.NoDirExists(t, wt)
 }
+
+func TestIdleIsOptionalAndKeepsItsBranch(t *testing.T) {
+	repo := testkit.NewRepo(t)
+	wip := testkit.AddWorktree(t, repo, ".worktrees/wip", "wip")
+	testkit.Commit(t, wip, "w.txt", "w\n", "unmerged work")
+	optIn(t, repo, "rules = [\"merged\", \"idle\"]\nmin_age = \"0\"\nidle_after = \"30d\"\n")
+	later := time.Now().Add(40 * 24 * time.Hour)
+
+	p, err := Build(t.Context(), gitx.Exec{}, repo, Options{Now: time.Now()})
+	require.NoError(t, err)
+	assert.Empty(t, p.Items, "not idle yet")
+
+	p, err = Build(t.Context(), gitx.Exec{}, repo, Options{Now: later})
+	require.NoError(t, err)
+	it := byPath(p)[wip]
+	assert.Equal(t, model.StatusIdle, it.Status)
+	assert.Equal(t, Keep, it.Action, "clean never removes idle work on its own")
+	assert.True(t, it.Optional)
+	assert.True(t, it.Eligible)
+	assert.False(t, it.DeleteBranch, "unmerged commits stay on the branch")
+
+	// As if picked by hand in the picker.
+	p.Items[0].Action = Remove
+	res, err := Apply(t.Context(), gitx.Exec{}, p, ApplyOptions{Now: func() time.Time { return later }, Log: oplog.Log{Dir: t.TempDir()}})
+	require.NoError(t, err)
+	require.Equal(t, Zapped, res[0].Outcome, res[0].Detail)
+	assert.NoDirExists(t, wip)
+	assert.Contains(t, testkit.Git(t, repo, "branch"), "wip")
+}

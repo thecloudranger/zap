@@ -52,6 +52,7 @@ const (
 	StatusEmpty   Status = "empty"   // never got a commit of its own
 	StatusMerged  Status = "merged"  // its work is already in the target
 	StatusGone    Status = "gone"    // its upstream branch was deleted on the remote
+	StatusIdle    Status = "idle"    // active, but untouched for longer than .zap idle_after
 	StatusActive  Status = "active"  // anything else
 )
 

@@ -99,7 +99,19 @@ func (p *Picker) rebuild() {
 
 func (p *Picker) item(r row) plan.Item { return p.plans[r.plan].Items[r.item] }
 
-func (p *Picker) selectable(r row) bool { return !r.header && p.item(r).Action != plan.Keep }
+// selectable: items Build marked for removal, and optional (idle) items that passed every
+// safety check in an opted-in repository.
+func (p *Picker) selectable(r row) bool {
+	if r.header {
+		return false
+	}
+	return Selectable(p.plans[r.plan], p.item(r))
+}
+
+// Selectable reports whether an item may be chosen for removal.
+func Selectable(pl plan.Plan, it plan.Item) bool {
+	return it.Action != plan.Keep || (it.Optional && it.Eligible && pl.OptedIn)
+}
 
 // Init implements tea.Model.
 func (p *Picker) Init() tea.Cmd { return nil }
@@ -358,7 +370,7 @@ func (p *Picker) renderRow(i int) string {
 	if st, ok := statusStyles[status]; ok {
 		status = st.Render(fmt.Sprintf("%-7s", status))
 	}
-	if it.Action == plan.Keep {
+	if !Selectable(pl, it) {
 		return cursor + keepStyle.Render(fmt.Sprintf(" ·  %-34s %-22s %-7s %8s  %s", p.rel(it.Path, pl.Repo), clip(dash(it.Branch), 22), it.Status, size, clip(it.Refusal, 50)))
 	}
 	return fmt.Sprintf("%s%s %-34s %-22s %s %8s", cursor, box, p.rel(it.Path, pl.Repo), clip(dash(it.Branch), 22), status, size)

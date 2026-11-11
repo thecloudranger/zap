@@ -189,3 +189,15 @@ func TestConstantHeightAndScroll(t *testing.T) {
 	assert.Equal(t, lines, strings.Count(view(p), "\n"), "height does not change while scrolling")
 	assert.Contains(t, view(p), "› ", "cursor stays visible")
 }
+
+func TestIdleIsOfferedNotPreselected(t *testing.T) {
+	pl := fixture()
+	pl[0].Items = append(pl[0].Items, plan.Item{Path: "/home/u/dev/a/old", Status: model.StatusIdle,
+		Action: plan.Keep, Optional: true, Eligible: true, Refusal: "idle"})
+	p := New(pl, "/home/u", nil)
+	n, _ := p.count()
+	assert.Equal(t, 2, n, "idle starts unselected")
+	press(t, p, "j", "j", "j", "space")
+	n, _ = p.count()
+	assert.Equal(t, 3, n, "idle can be picked by hand")
+}

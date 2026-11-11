@@ -43,6 +43,8 @@ type Item struct {
 	Gates        []model.CheckResult `json:"gates"`
 	Size         *model.Usage        `json:"size,omitempty"`
 	Unlock       bool                `json:"unlock,omitempty"` // release a stale lock first
+	// Optional items (idle) are kept unless a person selects them in the picker.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // Plan is everything clean would do in one repository.
@@ -103,6 +105,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 		if a.Main {
 			continue
 		}
+		markIdle(&a, pol, opt.Now)
 		if !pol.Allows(a.Verdict.Status) {
 			p.ActiveCount++
 			continue
@@ -110,6 +113,21 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 		p.Items = append(p.Items, planItem(ctx, git, rep, a, pol, gates, found, opt, running))
 	}
 	return p, nil
+}
+
+// markIdle relabels an active worktree as idle when the repository's rules include
+// "idle" and it has been untouched for longer than idle_after.
+func markIdle(a *model.Assessment, pol policy.Repo, now time.Time) {
+	last := a.Facts.LastActivity
+	if a.Verdict.Status != model.StatusActive || !pol.Allows(model.StatusIdle) || last.IsZero() {
+		return
+	}
+	after := time.Duration(pol.IdleAfter)
+	if age := now.Sub(last); age >= after {
+		a.Verdict.Status = model.StatusIdle
+		a.Verdict.Reason = fmt.Sprintf("unmerged, untouched for %s (idle_after %s)",
+			policy.FormatDuration(age.Truncate(time.Hour)), policy.FormatDuration(after))
+	}
 }
 
 // snapshot lists running processes once for a whole plan.
@@ -131,6 +149,9 @@ func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a mode
 		it.Action, it.Refusal = Keep, firstFailure(results)
 	case !optedIn:
 		it.Action, it.Refusal = Keep, "no "+policy.FileName+" in this repo (run `zap init` to opt in)"
+	case a.Verdict.Status == model.StatusIdle:
+		it.Action, it.Optional = Keep, true
+		it.Refusal = "idle: unmerged work is only removed when picked in `zap`"
 	case a.Prunable:
 		it.Action = Prune
 	default:

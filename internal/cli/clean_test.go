@@ -118,16 +118,27 @@ func TestInit(t *testing.T) {
 }
 
 func TestKeepUnselected(t *testing.T) {
-	plans := []plan.Plan{{Items: []plan.Item{
+	plans := []plan.Plan{{OptedIn: true, Items: []plan.Item{
 		{Path: "/a", Action: plan.Remove},
 		{Path: "/b", Action: plan.Prune},
 		{Path: "/c", Action: plan.Keep, Refusal: "locked"},
+		{Path: "/idle-ok", Action: plan.Keep, Optional: true, Eligible: true, Refusal: "idle"},
+		{Path: "/idle-locked", Action: plan.Keep, Optional: true, Eligible: false, Refusal: "locked"},
+		{Path: "/idle-unpicked", Action: plan.Keep, Optional: true, Eligible: true, Refusal: "idle"},
 	}}}
-	got := keepUnselected(plans, map[tui.Key]bool{{Plan: 0, Item: 1}: true, {Plan: 0, Item: 2}: true})
+	sel := map[tui.Key]bool{{Plan: 0, Item: 1}: true, {Plan: 0, Item: 2}: true, {Plan: 0, Item: 3}: true, {Plan: 0, Item: 4}: true}
+	got := keepUnselected(plans, sel)
 	assert.Equal(t, plan.Keep, got[0].Items[0].Action, "unselected removal is kept")
 	assert.Equal(t, "not selected", got[0].Items[0].Refusal)
 	assert.Equal(t, plan.Prune, got[0].Items[1].Action, "selected stays")
 	assert.Equal(t, plan.Keep, got[0].Items[2].Action, "a kept item can never be turned into a removal")
 	assert.Equal(t, "locked", got[0].Items[2].Refusal)
+	assert.Equal(t, plan.Remove, got[0].Items[3].Action, "an idle item picked by hand is removed")
+	assert.Equal(t, plan.Keep, got[0].Items[4].Action, "an idle item that failed a gate cannot be picked")
+	assert.Equal(t, plan.Keep, got[0].Items[5].Action, "idle items are never removed unless picked")
 	assert.Equal(t, plan.Remove, plans[0].Items[0].Action, "input plans are not mutated")
+
+	plans[0].OptedIn = false
+	got = keepUnselected(plans, sel)
+	assert.Equal(t, plan.Keep, got[0].Items[3].Action, "nothing is removed in a repository that has not opted in")
 }

@@ -68,15 +68,21 @@ func hasItems(plans []plan.Plan) bool {
 	return false
 }
 
-// keepUnselected turns every item the user did not select into a Keep, so Apply touches
-// exactly the selection. The picker can only select items Build marked for removal.
+// keepUnselected makes Apply touch exactly the selection: unselected items become Keep,
+// and a selected optional (idle) item becomes a removal. Nothing else can change: an item
+// a safety gate refused is never selectable.
 func keepUnselected(plans []plan.Plan, sel map[tui.Key]bool) []plan.Plan {
 	out := make([]plan.Plan, len(plans))
 	for pi, p := range plans {
 		p.Items = append([]plan.Item(nil), p.Items...)
 		for ii := range p.Items {
-			if p.Items[ii].Action != plan.Keep && !sel[tui.Key{Plan: pi, Item: ii}] {
-				p.Items[ii].Action, p.Items[ii].Refusal = plan.Keep, "not selected"
+			it := &p.Items[ii]
+			chosen := sel[tui.Key{Plan: pi, Item: ii}] && tui.Selectable(p, *it)
+			switch {
+			case !chosen && it.Action != plan.Keep:
+				it.Action, it.Refusal = plan.Keep, "not selected"
+			case chosen && it.Action == plan.Keep: // an idle item picked by hand
+				it.Action, it.Refusal = plan.Remove, ""
 			}
 		}
 		out[pi] = p

@@ -24,9 +24,10 @@ const FileName = ".zap"
 var ErrInvalid = errors.New("invalid .zap")
 
 // Statuses that a .zap may list in rules.
-var ruleStatuses = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing, model.StatusGone}
+var ruleStatuses = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing, model.StatusGone, model.StatusIdle}
 
-// defaultRules leave out "gone": a deleted upstream does not prove the work landed.
+// defaultRules leave out "gone" (a deleted upstream does not prove the work landed) and
+// "idle" (unmerged work is only ever removed when picked by hand).
 var defaultRules = []model.Status{model.StatusMerged, model.StatusEmpty, model.StatusMissing}
 
 // Repo is the content of a .zap file.
@@ -34,6 +35,7 @@ type Repo struct {
 	Target       string         `toml:"target"`
 	Rules        []model.Status `toml:"rules"`
 	MinAge       Duration       `toml:"min_age"`
+	IdleAfter    Duration       `toml:"idle_after"`
 	DeleteBranch *bool          `toml:"delete_branch"`
 	Protect      []string       `toml:"protect"`
 	KeepIgnored  []string       `toml:"keep_ignored"`
@@ -45,6 +47,7 @@ func Defaults() Repo {
 	return Repo{
 		Rules:        slices.Clone(defaultRules),
 		MinAge:       Duration(24 * time.Hour),
+		IdleAfter:    Duration(30 * 24 * time.Hour),
 		DeleteBranch: &yes,
 		Protect:      []string{"main", "master"},
 		KeepIgnored:  []string{".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"},
@@ -90,6 +93,9 @@ func ParseRepo(data string) (Repo, error) {
 	if !md.IsDefined("min_age") {
 		r.MinAge = d.MinAge
 	}
+	if !md.IsDefined("idle_after") {
+		r.IdleAfter = d.IdleAfter
+	}
 	if r.DeleteBranch == nil {
 		r.DeleteBranch = d.DeleteBranch
 	}
@@ -111,8 +117,8 @@ func ParseRepo(data string) (Repo, error) {
 			}
 		}
 	}
-	if r.MinAge < 0 {
-		return Repo{}, fmt.Errorf("%w: min_age must not be negative", ErrInvalid)
+	if r.MinAge < 0 || r.IdleAfter < 0 {
+		return Repo{}, fmt.Errorf("%w: min_age and idle_after must not be negative", ErrInvalid)
 	}
 	return r, nil
 }
@@ -137,10 +143,14 @@ const Template = `# zap opt-in file. With this file present, zap may remove work
 # Branch that "merged" is measured against (default: origin/HEAD, then main, then master).
 # target = "main"
 
-# Which statuses zap may remove: "merged", "empty", "missing", and optionally "gone"
-# (its remote branch was deleted). For "gone", the worktree is removed but the branch
-# is kept unless its work is in the target.
+# Which statuses zap may remove: "merged", "empty", "missing", and optionally:
+#   "gone": its remote branch was deleted. The branch is kept unless its work is in target.
+#   "idle": unmerged but untouched for idle_after. Offered in the picker, never preselected
+#           and never removed by "zap clean"; the branch (with its commits) is always kept.
 rules = ["merged", "empty", "missing"]
+
+# How long an unmerged worktree must be untouched to count as idle (only with "idle").
+idle_after = "30d"
 
 # Never touch a worktree with activity more recent than this (units: m, h, d, w).
 min_age = "1d"

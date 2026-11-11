@@ -65,6 +65,7 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 	}
 	current := map[string]model.Assessment{}
 	for _, a := range fresh.Worktrees {
+		markIdle(&a, p.Policy, opt.Now()) // same relabelling as Build, so statuses compare
 		current[a.Path] = a
 	}
 	gates := opt.Gates
