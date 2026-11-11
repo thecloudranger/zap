@@ -22,17 +22,30 @@ go install github.com/thecloudranger/zap/cmd/zap@latest
 zap scan                 # List worktrees of the repo you're in
 zap scan ~/dev/my-app    # …or of any repo by path
 zap scan --json          # JSON output for scripts and agents
+zap explain <path>       # Why a worktree got its status: every check, pass/fail
 zap version              # Show version
 ```
 
 ```text
-~/dev/my-app  ·  3 linked worktrees
+~/dev/my-app  ·  4 linked worktrees  ·  target main
 
-  WORKTREE                         BRANCH                  HEAD     STATE
-  ~/dev/codex-7f3a                 (detached)              1ad210a  -
-  .claude/worktrees/auth-refactor  worktree-auth-refactor  1ad210a  locked
-  .worktrees/login-redirect        fix/login-redirect      1ad210a  -
+  WORKTREE                BRANCH         STATUS   AGE  ACTIVE  NOTES
+  .claude/worktrees/auth  worktree-auth  merged   3d   2d      -
+  .claude/worktrees/new   worktree-new   empty    1h   1h      -
+  .worktrees/login        fix/login      active   5d   2h      dirty(1)
+  .worktrees/old          old            missing  2w   -       -
+
+1 merged · 1 empty · 1 missing · 1 active   (zap explain <path> for details)
 ```
+
+| Status | Meaning |
+|---|---|
+| `merged` | Its commits are already in the target branch |
+| `empty` | It never got a commit of its own |
+| `missing` | Git still lists it, but its folder is gone |
+| `active` | Anything else |
+
+The target branch is `origin/HEAD`, then `main`, then `master`; override it with `--target`.
 
 ## Development
 
