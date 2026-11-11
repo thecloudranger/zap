@@ -21,27 +21,38 @@ go install github.com/thecloudranger/zap/cmd/zap@latest
 ```bash
 zap scan                 # List worktrees of the repo you're in
 zap scan ~/dev/my-app    # …or of any repo by path
+zap scan --all           # …or of every repo under your scan roots
 zap scan --json          # JSON output for scripts and agents
 zap explain <path>       # Why a worktree got its status: every check, pass/fail
 
 zap init                 # Opt this repo in to cleaning (writes .zap)
 zap clean --dry-run      # Show what would be removed, and what is kept and why
 zap clean                # Remove them, after a confirmation
+zap clean --all          # …in every opted-in repo at once
 zap history              # What zap removed, with backup refs
 zap undo                 # Bring back what the last clean removed
+zap roots                # Show or change where --all looks (zap roots add|remove|reset)
 zap version              # Show version
 ```
 
 ```text
-~/dev/my-app  ·  4 linked worktrees  ·  target main
+$ zap scan --all
+~/dev/api  ·  1 linked worktree  ·  target main
 
-  WORKTREE                BRANCH         STATUS   AGE  ACTIVE  NOTES
-  .claude/worktrees/auth  worktree-auth  merged   3d   2d      -
-  .claude/worktrees/new   worktree-new   empty    1h   1h      -
-  .worktrees/login        fix/login      active   5d   2h      dirty(1)
-  .worktrees/old          old            missing  2w   -       -
+  WORKTREE                     BRANCH   AGENT  STATUS  AGE  ACTIVE  NOTES
+  ~/.codex/worktrees/a1f3/api  a85e7da  codex  empty   6h   6h      detached
 
-1 merged · 1 empty · 1 missing · 1 active   (zap explain <path> for details)
+1 empty
+
+~/dev/my-app  ·  2 linked worktrees  ·  target main
+
+  WORKTREE                BRANCH         AGENT   STATUS  AGE  ACTIVE  NOTES
+  .claude/worktrees/auth  worktree-auth  claude  merged  3d   2d      -
+  .worktrees/login        fix/login      -       active  5d   2h      dirty(1)
+
+1 merged · 1 active
+
+Scanned 2 repositories in 300ms; 2 with linked worktrees. Roots: zap roots
 ```
 
 | Status | Meaning |
@@ -53,6 +64,9 @@ zap version              # Show version
 | `active` | Anything else |
 
 The target branch is `origin/HEAD`, then `main`, then `master`; override it with `--target`.
+AGENT is guessed from the folder a worktree lives in (for example `.claude/worktrees` or
+`~/.codex/worktrees`). `zap scan` outside a repository, or with `--all`, searches `~/dev`, `~/code`,
+`~/src`, `~/projects` and known agent worktree folders; `zap roots` changes that list.
 Add `--fetch` to `scan`, `explain` or `clean` to fetch remotes first, so pull requests merged on
 GitHub are seen.
 
