@@ -260,7 +260,7 @@ func TestCleanNonInteractive(t *testing.T) {
 	assert.True(t, env.Data.Results[0].BranchDeleted)
 	assert.NoDirExists(t, wt)
 	backup := env.Data.Results[0].BackupRef
-	assert.Equal(t, env.Data.Plan.Items[0].Head, testkit.Git(t, repo, "rev-parse", backup), "backup ref holds the old tip")
+	assert.Equal(t, env.Data.Plans[0].Items[0].Head, testkit.Git(t, repo, "rev-parse", backup), "backup ref holds the old tip")
 
 	r = zap("history", "--json")
 	require.Equal(t, 0, r.code)
@@ -363,4 +363,58 @@ func TestScanAll(t *testing.T) {
 	assert.Contains(t, runHome(t, home, home, "roots").stdout, "These are the defaults")
 
 	assert.Equal(t, cli.ExitUsage, runHome(t, home, home, "scan", "--all", app).code)
+}
+
+func TestCleanAll(t *testing.T) {
+	home := testkit.TempDir(t)
+	acceptDisclaimer(t, home)
+	merged := func(rel string) (repo, wt string) {
+		repo = filepath.Join(home, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(repo), 0o755))
+		testkit.Git(t, filepath.Dir(repo), "init", "-q", "-b", "main", filepath.Base(repo))
+		testkit.Commit(t, repo, "README.md", "x\n", "init")
+		wt = testkit.AddWorktree(t, repo, ".claude/worktrees/done", "worktree-done")
+		testkit.Commit(t, wt, "d.txt", "d\n", "done")
+		testkit.MergeFF(t, repo, "worktree-done")
+		return repo, wt
+	}
+	a, aWT := merged("dev/a")
+	b, bWT := merged("dev/b")
+	_, cWT := merged("dev/c") // not opted in
+	bad, badWT := merged("dev/bad")
+	for _, r := range []string{a, b} {
+		require.NoError(t, os.WriteFile(filepath.Join(r, ".zap"), []byte(`min_age = "0"`), 0o644))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(bad, ".zap"), []byte(`min_agee = "0"`), 0o644))
+	zap := func(args ...string) result { return runHome(t, home, home, args...) }
+
+	r := zap("clean", "--all", "--dry-run")
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stdout, "~/dev/a  ·  target main  ·  opted in")
+	assert.Contains(t, r.stdout, "~/dev/b  ·  target main  ·  opted in")
+	assert.Contains(t, r.stdout, "~/dev/c  ·  1 candidate, 0 passing the safety checks now")
+	assert.Regexp(t, `warning: ~/dev/bad: skipped: .*min_agee`, r.stdout)
+	assert.Contains(t, r.stdout, "2 to zap in 2 opted-in repositories.")
+
+	assert.Equal(t, cli.ExitRefused, zap("clean", "--all").code, "non-interactive needs --yes")
+	assert.Equal(t, cli.ExitUsage, zap("clean", "--all", a).code)
+
+	r = zap("clean", "--all", "--yes", "--json")
+	require.Equal(t, 0, r.code, r.stdout+r.stderr)
+	var env struct {
+		cli.Envelope
+		Data cli.CleanResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	assert.Len(t, env.Data.Results, 2)
+	assert.NotEmpty(t, env.Warnings, "the invalid .zap is reported")
+	assert.NoDirExists(t, aWT)
+	assert.NoDirExists(t, bWT)
+	assert.DirExists(t, cWT, "not opted in")
+	assert.DirExists(t, badWT, "invalid .zap means hands off")
+
+	r = zap("undo")
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.DirExists(t, aWT, "one undo restores the whole multi-repo run")
+	assert.DirExists(t, bWT)
 }

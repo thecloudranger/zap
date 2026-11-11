@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thecloudranger/zap/internal/oplog"
 	"github.com/thecloudranger/zap/internal/plan"
@@ -18,13 +19,13 @@ import (
 // CleanResult is the `data` payload of `zap clean --json`.
 type CleanResult struct {
 	DryRun  bool          `json:"dryRun"`
-	Plan    plan.Plan     `json:"plan"`
+	Plans   []plan.Plan   `json:"plans"`
 	Results []plan.Result `json:"results"`
 }
 
 type cleanFlags struct {
-	dryRun, yes, asJSON, fetch bool
-	target                     string
+	dryRun, yes, asJSON, fetch, all bool
+	target                          string
 }
 
 const disclaimer = `Before zap deletes anything, please read this once:
@@ -44,11 +45,16 @@ func newCleanCmd(d Deps) *cobra.Command {
 	var fl cleanFlags
 	cmd := &cobra.Command{
 		Use:   "clean [PATH]",
-		Short: "Remove merged, empty and missing worktrees of an opted-in repository",
-		Args:  usageArgs(cobra.MaximumNArgs(1)),
+		Short: "Remove merged, empty and missing worktrees of opted-in repositories",
+		Long: "Remove merged, empty and missing worktrees of an opted-in repository (the current one,\n" +
+			"or PATH), or of every opted-in repository under the scan roots with --all.",
+		Args: usageArgs(cobra.MaximumNArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if fl.dryRun && fl.yes {
 				return usageErr(errors.New("--dry-run and --yes cannot be used together"))
+			}
+			if fl.all && len(args) > 0 {
+				return usageErr(errors.New("--all and PATH cannot be used together"))
 			}
 			err := runClean(cmd, d, args, fl)
 			if err == nil || !fl.asJSON {
@@ -75,26 +81,24 @@ func newCleanCmd(d Deps) *cobra.Command {
 	f.BoolVar(&fl.asJSON, "json", false, "output a JSON envelope on stdout")
 	f.StringVar(&fl.target, "target", "", "branch that counts as merged-into (overrides .zap)")
 	f.BoolVar(&fl.fetch, "fetch", false, "fetch all remotes first so merged pull requests are seen")
+	f.BoolVarP(&fl.all, "all", "a", false, "every opted-in repository under the scan roots")
 	return cmd
 }
 
 func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 	out := cmd.OutOrStdout()
-	dir, err := targetDir(d, args)
-	if err != nil {
-		return err
-	}
 	cwd, _ := d.Getwd()
-	p, err := plan.Build(cmd.Context(), d.Git, dir, plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd})
+	plans, warnings, err := buildPlans(cmd, d, args, fl, cwd)
 	if err != nil {
 		return err
 	}
-	toZap, _ := p.Counts()
-	if fl.dryRun || !p.OptedIn || toZap == 0 {
+	toZap, repos := zapCounts(plans)
+	if fl.dryRun || toZap == 0 {
 		if fl.asJSON {
-			return writeJSON(out, Envelope{Command: "clean", Status: "ok", Data: CleanResult{DryRun: true, Plan: p, Results: []plan.Result{}}, Warnings: p.Warnings})
+			return writeJSON(out, Envelope{Command: "clean", Status: "ok", Warnings: warnings,
+				Data: CleanResult{DryRun: true, Plans: plans, Results: []plan.Result{}}})
 		}
-		renderPlan(out, p, d.Home)
+		renderPlans(out, plans, warnings, fl.all, d.Home)
 		if fl.dryRun && toZap > 0 {
 			_, _ = fmt.Fprintln(out, "\nDry run: nothing was changed.")
 		}
@@ -109,22 +113,35 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		if !d.IsTTY() || fl.asJSON {
 			return &ExitError{Code: ExitRefused, Err: errors.New("not on a terminal: pass --yes to confirm, or --dry-run to preview")}
 		}
-		renderPlan(out, p, d.Home)
-		if !ask(in, out, fmt.Sprintf("\nZap %d worktree%s? [y/N] ", toZap, plural(toZap)), "y", "yes") {
+		renderPlans(out, plans, warnings, fl.all, d.Home)
+		where := ""
+		if repos > 1 {
+			where = fmt.Sprintf(" in %d repositories", repos)
+		}
+		if !ask(in, out, fmt.Sprintf("\nZap %d worktree%s%s? [y/N] ", toZap, plural(toZap), where), "y", "yes") {
 			return &ExitError{Code: ExitRefused, Err: errors.New("cancelled; nothing was changed")}
 		}
 	}
 
-	results, err := plan.Apply(cmd.Context(), d.Git, p, plan.ApplyOptions{Now: d.Now, Cwd: cwd, Log: oplog.Log{Dir: d.StateDir}})
-	if err != nil {
-		return err
+	results := []plan.Result{}
+	run := plan.RunID(d.Now()) // one run across all repositories, so one undo restores it
+	for _, p := range plans {
+		if n, _ := p.Counts(); n == 0 || !p.OptedIn {
+			continue
+		}
+		rs, err := plan.Apply(cmd.Context(), d.Git, p, plan.ApplyOptions{Run: run, Now: d.Now, Cwd: cwd, Log: oplog.Log{Dir: d.StateDir}})
+		results = append(results, rs...)
+		if err != nil {
+			return err
+		}
 	}
 	if fl.asJSON {
-		if err := writeOK(out, "clean", CleanResult{Plan: p, Results: results}); err != nil {
+		if err := writeJSON(out, Envelope{Command: "clean", Status: "ok", Warnings: warnings,
+			Data: CleanResult{Plans: plans, Results: results}}); err != nil {
 			return err
 		}
 	} else {
-		renderResults(out, p, results, d.Home)
+		renderResults(out, results, d.Home)
 	}
 	for _, r := range results {
 		if r.Outcome == plan.Failed {
@@ -132,6 +149,82 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		}
 	}
 	return nil
+}
+
+// buildPlans plans the current repository, PATH, or (with --all) every repository
+// under the scan roots that has worktrees. A repository that fails to plan becomes a
+// warning in --all mode.
+func buildPlans(cmd *cobra.Command, d Deps, args []string, fl cleanFlags, cwd string) ([]plan.Plan, []string, error) {
+	opt := plan.Options{Target: fl.target, Fetch: fl.fetch, Now: d.Now(), Cwd: cwd}
+	if !fl.all {
+		dir, err := targetDir(d, args)
+		if err != nil {
+			return nil, nil, err
+		}
+		p, err := plan.Build(cmd.Context(), d.Git, dir, opt)
+		if err != nil {
+			return nil, nil, err
+		}
+		return []plan.Plan{p}, p.Warnings, nil
+	}
+
+	prog := newProgress(cmd, d, fl.asJSON)
+	_, found, err := discoverRepos(cmd, d, prog)
+	if err != nil {
+		prog.done()
+		return nil, nil, err
+	}
+	warnings := found.Warnings
+	built := make([]*plan.Plan, len(found.Repos))
+	errs := make([]error, len(found.Repos))
+	g, ctx := errgroup.WithContext(cmd.Context())
+	g.SetLimit(4)
+	for i, dir := range found.Repos {
+		g.Go(func() error {
+			p, err := plan.Build(ctx, d.Git, dir, opt)
+			if err != nil && ctx.Err() != nil {
+				return ctx.Err()
+			}
+			built[i], errs[i] = &p, err
+			prog.repo(len(found.Repos))
+			return nil
+		})
+	}
+	err = g.Wait()
+	prog.done()
+	if err != nil {
+		return nil, nil, err
+	}
+	var plans []plan.Plan
+	for i, p := range built {
+		switch {
+		case errs[i] != nil:
+			warnings = append(warnings, fmt.Sprintf("%s: skipped: %v", tildify(found.Repos[i], d.Home), errs[i]))
+		case len(p.Items) > 0:
+			plans = append(plans, *p)
+			warnings = append(warnings, prefixed(tildify(p.Repo, d.Home), p.Warnings)...)
+		}
+	}
+	return plans, warnings, nil
+}
+
+func prefixed(prefix string, ws []string) []string {
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = prefix + ": " + w
+	}
+	return out
+}
+
+// zapCounts returns how many worktrees would be removed and in how many repositories.
+func zapCounts(plans []plan.Plan) (worktrees, repos int) {
+	for _, p := range plans {
+		if n, _ := p.Counts(); n > 0 && p.OptedIn {
+			worktrees += n
+			repos++
+		}
+	}
+	return worktrees, repos
 }
 
 // ensureDisclaimer asks once, on a terminal, and remembers the answer.
@@ -174,13 +267,59 @@ func ask(in *bufio.Reader, out io.Writer, prompt string, accept ...string) bool 
 	return false
 }
 
+func renderPlans(w io.Writer, plans []plan.Plan, warnings []string, all bool, home string) {
+	for _, warn := range warnings {
+		_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
+	}
+	if len(warnings) > 0 {
+		_, _ = fmt.Fprintln(w)
+	}
+	if !all {
+		for _, p := range plans {
+			renderPlan(w, p, home)
+		}
+		return
+	}
+	var waiting []plan.Plan
+	for _, p := range plans {
+		if p.OptedIn {
+			renderPlan(w, p, home)
+			_, _ = fmt.Fprintln(w)
+		} else if len(p.Items) > 0 {
+			waiting = append(waiting, p)
+		}
+	}
+	if len(waiting) > 0 {
+		_, _ = fmt.Fprintln(w, "Not opted in (run `zap init <repo>` to allow cleaning):")
+		for _, p := range waiting {
+			n := len(p.Items)
+			_, _ = fmt.Fprintf(w, "  %s  ·  %d candidate%s, %d passing the safety checks now\n",
+				tildify(p.Repo, home), n, plural(n), eligible(p))
+		}
+		_, _ = fmt.Fprintln(w)
+	}
+	toZap, repos := zapCounts(plans)
+	if toZap == 0 && len(waiting) == 0 {
+		_, _ = fmt.Fprintln(w, "Nothing to zap.")
+		return
+	}
+	_, _ = fmt.Fprintf(w, "%d to zap in %d opted-in repositor%s.\n", toZap, repos, pluralY(repos))
+}
+
+func eligible(p plan.Plan) int {
+	n := 0
+	for _, it := range p.Items {
+		if it.Eligible {
+			n++
+		}
+	}
+	return n
+}
+
 func renderPlan(w io.Writer, p plan.Plan, home string) {
 	optIn := "opted in (.zap)"
 	if !p.OptedIn {
 		optIn = "not opted in: run `zap init` to allow cleaning"
-	}
-	for _, warn := range p.Warnings {
-		_, _ = fmt.Fprintf(w, "warning: %s\n", warn)
 	}
 	_, _ = fmt.Fprintf(w, "%s  ·  target %s  ·  %s\n\n", tildify(p.Repo, home), p.Target.Name, optIn)
 	if len(p.Items) == 0 {
@@ -215,7 +354,7 @@ func describe(it plan.Item) string {
 	return s
 }
 
-func renderResults(w io.Writer, p plan.Plan, results []plan.Result, home string) {
+func renderResults(w io.Writer, results []plan.Result, home string) {
 	marks := map[string]string{plan.Zapped: "✓", plan.Skipped: "-", plan.Failed: "✗"}
 	zapped := 0
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -227,7 +366,7 @@ func renderResults(w io.Writer, p plan.Plan, results []plan.Result, home string)
 		if r.BranchDeleted {
 			detail = strings.TrimSpace("branch deleted, backup " + r.BackupRef + " " + detail)
 		}
-		_, _ = fmt.Fprintf(tw, "  %s %s\t%s\t%s\n", marks[r.Outcome], r.Outcome, relTo(r.Path, p.Repo, home), detail)
+		_, _ = fmt.Fprintf(tw, "  %s %s\t%s\t%s\n", marks[r.Outcome], r.Outcome, relTo(r.Path, r.Repo, home), detail)
 	}
 	_ = tw.Flush()
 	_, _ = fmt.Fprintf(w, "\nZapped %d worktree%s. See `zap history` for the record.\n", zapped, plural(zapped))

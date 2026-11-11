@@ -21,6 +21,7 @@ const (
 
 // Result is what happened to one item.
 type Result struct {
+	Repo          string `json:"repo"`
 	Path          string `json:"path"`
 	Branch        string `json:"branch,omitempty"`
 	Outcome       string `json:"outcome"`
@@ -31,11 +32,15 @@ type Result struct {
 
 // ApplyOptions control Apply.
 type ApplyOptions struct {
+	Run   string // groups the log entries of one clean; empty generates one from Now
 	Now   func() time.Time
 	Cwd   string
 	Log   oplog.Log
 	Gates []safety.Gate // nil means safety.Default()
 }
+
+// RunID names a clean run; it is also a path component of the backup refs.
+func RunID(t time.Time) string { return t.UTC().Format("20060102T150405Z") }
 
 // BackupPrefix is where branch tips are saved before deletion.
 const BackupPrefix = "refs/zap/backup/"
@@ -46,8 +51,10 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 	if !p.OptedIn {
 		return nil, fmt.Errorf("plan: %s has not opted in", p.Repo)
 	}
-	start := opt.Now()
-	run := start.UTC().Format("20060102T150405Z")
+	run := opt.Run
+	if run == "" {
+		run = RunID(opt.Now())
+	}
 	fresh, err := inspect.Repo(ctx, git, p.Repo, inspect.Options{Target: p.Target.Name})
 	if err != nil {
 		return nil, fmt.Errorf("plan: recheck: %w", err)
@@ -84,7 +91,7 @@ func Apply(ctx context.Context, git gitx.Runner, p Plan, opt ApplyOptions) ([]Re
 }
 
 func applyItem(ctx context.Context, git gitx.Runner, p Plan, it Item, current map[string]model.Assessment, gates []safety.Gate, run string, opt ApplyOptions) Result {
-	r := Result{Path: it.Path, Branch: it.Branch}
+	r := Result{Repo: p.Repo, Path: it.Path, Branch: it.Branch}
 	if why := changed(it, current); why != "" {
 		r.Outcome, r.Detail = Skipped, "changed since the plan: "+why
 		return r

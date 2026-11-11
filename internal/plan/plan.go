@@ -37,6 +37,7 @@ type Item struct {
 	DeleteBranch bool                `json:"deleteBranch"`
 	BranchNote   string              `json:"branchNote,omitempty"`
 	Refusal      string              `json:"refusal,omitempty"` // why it is kept
+	Eligible     bool                `json:"eligible"`          // passed every safety gate
 	Gates        []model.CheckResult `json:"gates"`
 }
 
@@ -103,7 +104,7 @@ func Build(ctx context.Context, git gitx.Runner, dir string, opt Options) (Plan,
 func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options) Item {
 	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason}
 	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd}, gates)
-	it.Gates = results
+	it.Gates, it.Eligible = results, ok
 	switch {
 	case !ok:
 		it.Action, it.Refusal = Keep, firstFailure(results)

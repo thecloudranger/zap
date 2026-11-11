@@ -99,16 +99,8 @@ func scan(cmd *cobra.Command, d Deps, args []string, fl scanFlags) (ScanResult, 
 // A repository that cannot be inspected becomes a warning, not a failure.
 func scanAll(cmd *cobra.Command, d Deps, opt inspect.Options, quiet bool) (ScanResult, error) {
 	start := time.Now()
-	roots, _, err := configuredRoots(d)
-	if err != nil {
-		return ScanResult{}, err
-	}
-	abs := make([]string, len(roots))
-	for i, r := range roots {
-		abs[i] = expandHome(r, d.Home)
-	}
 	progress := newProgress(cmd, d, quiet)
-	found, err := discover.Find(cmd.Context(), abs, discover.Options{Progress: progress.folders})
+	roots, found, err := discoverRepos(cmd, d, progress)
 	if err != nil {
 		progress.done()
 		return ScanResult{}, err
@@ -149,6 +141,20 @@ func scanAll(cmd *cobra.Command, d Deps, opt inspect.Options, quiet bool) (ScanR
 	}
 	res.Elapsed = time.Since(start)
 	return res, nil
+}
+
+// discoverRepos finds every repository under the configured scan roots.
+func discoverRepos(cmd *cobra.Command, d Deps, progress *progress) ([]string, discover.Result, error) {
+	roots, _, err := configuredRoots(d)
+	if err != nil {
+		return nil, discover.Result{}, err
+	}
+	abs := make([]string, len(roots))
+	for i, r := range roots {
+		abs[i] = expandHome(r, d.Home)
+	}
+	found, err := discover.Find(cmd.Context(), abs, discover.Options{Progress: progress.folders})
+	return roots, found, err
 }
 
 func targetDir(d Deps, args []string) (string, error) {
