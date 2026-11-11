@@ -173,3 +173,18 @@ func (p Plan) Counts() (zap, keep int) {
 	}
 	return zap, keep
 }
+
+// Describe says what removing the item does, e.g. "remove worktree, delete branch".
+func (it Item) Describe() string {
+	s := "remove worktree"
+	if it.Action == Prune {
+		s = "unregister (folder already gone)"
+	}
+	switch {
+	case it.DeleteBranch:
+		s += ", delete branch"
+	case it.BranchNote != "":
+		s += ", branch " + it.BranchNote
+	}
+	return s
+}

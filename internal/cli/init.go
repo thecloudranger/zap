@@ -29,20 +29,12 @@ func newInitCmd(d Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := filepath.Join(repo.Root, policy.FileName)
-			f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-			if errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("cli: %s exists: %w", tildify(path, d.Home), ErrAlreadyOptedIn)
-			}
+			path, err := writeZap(repo.Root)
 			if err != nil {
-				return fmt.Errorf("cli: %w", err)
-			}
-			if _, err := f.WriteString(policy.Template); err != nil {
-				_ = f.Close()
-				return fmt.Errorf("cli: write %s: %w", path, err)
-			}
-			if err := f.Close(); err != nil {
-				return fmt.Errorf("cli: %w", err)
+				if errors.Is(err, ErrAlreadyOptedIn) {
+					return fmt.Errorf("cli: %s exists: %w", tildify(path, d.Home), ErrAlreadyOptedIn)
+				}
+				return err
 			}
 			out := cmd.OutOrStdout()
 			_, _ = fmt.Fprintf(out, "Wrote %s\n\n", tildify(path, d.Home))
@@ -52,4 +44,24 @@ func newInitCmd(d Deps) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// writeZap creates <root>/.zap from the template; it never overwrites one.
+func writeZap(root string) (string, error) {
+	path := filepath.Join(root, policy.FileName)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if errors.Is(err, os.ErrExist) {
+		return path, ErrAlreadyOptedIn
+	}
+	if err != nil {
+		return path, fmt.Errorf("cli: %w", err)
+	}
+	if _, err := f.WriteString(policy.Template); err != nil {
+		_ = f.Close()
+		return path, fmt.Errorf("cli: write %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return path, fmt.Errorf("cli: %w", err)
+	}
+	return path, nil
 }

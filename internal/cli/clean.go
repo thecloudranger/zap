@@ -101,7 +101,7 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		}
 		renderPlans(out, plans, warnings, fl.all, d.Home)
 		if fl.dryRun && toZap > 0 {
-			_, _ = fmt.Fprintf(out, "\nDry run: nothing was changed. Zapping would free about %s.\n", humanBytes(reclaimable(plans)))
+			_, _ = fmt.Fprintf(out, "\nDry run: nothing was changed. Zapping would free about %s.\n", sizer.Human(reclaimable(plans)))
 		}
 		return nil
 	}
@@ -124,6 +124,13 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 		}
 	}
 
+	return applyAndReport(cmd, d, plans, warnings, fl, cwd)
+}
+
+// applyAndReport applies every opted-in plan under one run id and reports the results.
+// clean and the interactive picker both end here.
+func applyAndReport(cmd *cobra.Command, d Deps, plans []plan.Plan, warnings []string, fl cleanFlags, cwd string) error {
+	out := cmd.OutOrStdout()
 	results := []plan.Result{}
 	freeBefore, freeErr := sizer.Free(plans[0].Repo)
 	run := plan.RunID(d.Now()) // one run across all repositories, so one undo restores it
@@ -232,11 +239,11 @@ func renderFreed(w io.Writer, results []plan.Result, before, after uint64, oneDi
 	if freed == 0 {
 		return
 	}
-	line := fmt.Sprintf("Freed about %s", humanBytes(freed))
+	line := fmt.Sprintf("Freed about %s", sizer.Human(freed))
 	if oneDisk {
-		line += "  ·  free space " + humanBytes(int64(after))
+		line += "  ·  free space " + sizer.Human(int64(after))
 		if after > before { // other processes write too, so the change can be noise
-			line += " (+" + humanBytes(int64(after-before)) + ")"
+			line += " (+" + sizer.Human(int64(after-before)) + ")"
 		}
 	}
 	_, _ = fmt.Fprintln(w, line+".")
@@ -363,10 +370,10 @@ func renderPlan(w io.Writer, p plan.Plan, home string) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "  \tWORKTREE\tBRANCH\tSTATUS\tSIZE\tWHAT")
 	for _, it := range p.Items {
-		mark, what := "✓", describe(it)
+		mark, what := "✓", it.Describe()
 		size := "-"
 		if it.Size != nil {
-			size = humanBytes(it.Size.Total)
+			size = sizer.Human(it.Size.Total)
 		}
 		if it.Action == plan.Keep {
 			mark, what = "·", "keep: "+it.Refusal
@@ -377,23 +384,9 @@ func renderPlan(w io.Writer, p plan.Plan, home string) {
 	toZap, keep := p.Counts()
 	line := fmt.Sprintf("\n%d to zap · %d kept · %d active", toZap, keep, p.ActiveCount)
 	if n := p.Reclaimable(); n > 0 {
-		line += fmt.Sprintf("  ·  frees about %s", humanBytes(n))
+		line += fmt.Sprintf("  ·  frees about %s", sizer.Human(n))
 	}
 	_, _ = fmt.Fprintln(w, line)
-}
-
-func describe(it plan.Item) string {
-	s := "remove worktree"
-	if it.Action == plan.Prune {
-		s = "unregister (folder already gone)"
-	}
-	switch {
-	case it.DeleteBranch:
-		s += ", delete branch"
-	case it.BranchNote != "":
-		s += ", branch " + it.BranchNote
-	}
-	return s
 }
 
 func renderResults(w io.Writer, results []plan.Result, home string) {

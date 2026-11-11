@@ -112,9 +112,9 @@ func renderExplain(w io.Writer, res ExplainResult, home string, now time.Time) e
 	_, _ = fmt.Fprintf(w, "    dirty          %s\n", yesno(f.Dirty, fmt.Sprintf("yes, %d changed path%s", f.Changes, plural(f.Changes))))
 	_, _ = fmt.Fprintf(w, "    locked         %s\n", yesno(a.Locked, "yes "+a.LockReason))
 	if u := f.Size; u != nil {
-		_, _ = fmt.Fprintf(w, "    size           %s freed if removed (%s of it dependencies and build output)\n", humanBytes(u.Total), humanBytes(u.Deps))
+		_, _ = fmt.Fprintf(w, "    size           %s freed if removed (%s of it dependencies and build output)\n", sizer.Human(u.Total), sizer.Human(u.Deps))
 		if u.Shared > 0 {
-			_, _ = fmt.Fprintf(w, "    shared         %s hard-linked with other folders, not freed\n", humanBytes(u.Shared))
+			_, _ = fmt.Fprintf(w, "    shared         %s hard-linked with other folders, not freed\n", sizer.Human(u.Shared))
 		}
 	}
 	_, _ = fmt.Fprintf(w, "    created        %s\n", stamp(now, f.Created))

@@ -25,6 +25,7 @@ var allowed = map[string][]string{
 	"internal/verdict":  {"internal/model", "internal/gitx"},
 	"internal/inspect":  {"internal/model", "internal/gitx", "internal/verdict", "internal/agent", "internal/sizer"},
 	"internal/sizer":    {"internal/model"},
+	"internal/tui":      {"internal/model", "internal/plan", "internal/sizer"},
 	"internal/agent":    {},
 	"internal/discover": {},
 	"internal/policy":   {"internal/model"},

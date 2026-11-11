@@ -63,6 +63,7 @@ func stateDir(home string) string {
 
 // NewRoot builds the zap command tree.
 func NewRoot(d Deps) *cobra.Command {
+	var all bool
 	root := &cobra.Command{
 		Use:           "zap",
 		Short:         "Find and zap stale git worktrees left behind by agents and humans",
@@ -70,11 +71,16 @@ func NewRoot(d Deps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          usageArgs(cobra.NoArgs),
+		Long: "Find and zap stale git worktrees left behind by agents and humans.\n\n" +
+			"On a terminal, zap with no command opens an interactive picker.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// No subcommand: show help.
-			return cmd.Help()
+			if !d.IsTTY() {
+				return cmd.Help()
+			}
+			return runPicker(cmd, d, all)
 		},
 	}
+	root.Flags().BoolVarP(&all, "all", "a", false, "pick from every repository under the scan roots")
 	root.SetIn(d.In)
 	root.SetOut(d.Out)
 	root.SetErr(d.Err)

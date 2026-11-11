@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thecloudranger/zap/internal/gitx"
+	"github.com/thecloudranger/zap/internal/plan"
 	"github.com/thecloudranger/zap/internal/policy"
 	"github.com/thecloudranger/zap/internal/testkit"
+	"github.com/thecloudranger/zap/internal/tui"
 )
 
 // session runs zap in-process as if on a terminal, with typed input.
@@ -113,4 +115,19 @@ func TestInit(t *testing.T) {
 	out, code = s.run("init")
 	assert.Equal(t, ExitFailure, code)
 	assert.Contains(t, out, "already opted in")
+}
+
+func TestKeepUnselected(t *testing.T) {
+	plans := []plan.Plan{{Items: []plan.Item{
+		{Path: "/a", Action: plan.Remove},
+		{Path: "/b", Action: plan.Prune},
+		{Path: "/c", Action: plan.Keep, Refusal: "locked"},
+	}}}
+	got := keepUnselected(plans, map[tui.Key]bool{{Plan: 0, Item: 1}: true, {Plan: 0, Item: 2}: true})
+	assert.Equal(t, plan.Keep, got[0].Items[0].Action, "unselected removal is kept")
+	assert.Equal(t, "not selected", got[0].Items[0].Refusal)
+	assert.Equal(t, plan.Prune, got[0].Items[1].Action, "selected stays")
+	assert.Equal(t, plan.Keep, got[0].Items[2].Action, "a kept item can never be turned into a removal")
+	assert.Equal(t, "locked", got[0].Items[2].Refusal)
+	assert.Equal(t, plan.Remove, plans[0].Items[0].Action, "input plans are not mutated")
 }

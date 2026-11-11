@@ -90,3 +90,20 @@ func inDeps(root, p string) bool {
 
 // ErrNoStatfs is returned when free space cannot be read.
 var ErrNoStatfs = errors.New("free space unavailable")
+
+// Human formats a byte count in decimal units, as Finder does: 999 B, 1.2 MB, 45 GB.
+func Human(n int64) string {
+	const unit = 1000
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	f, i := float64(n), 0
+	units := []string{"KB", "MB", "GB", "TB", "PB"}
+	for f /= unit; f >= unit && i < len(units)-1; f /= unit {
+		i++
+	}
+	if f < 10 {
+		return fmt.Sprintf("%.1f %s", f, units[i])
+	}
+	return fmt.Sprintf("%.0f %s", f, units[i])
+}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thecloudranger/zap/internal/model"
+	"github.com/thecloudranger/zap/internal/sizer"
 )
 
 func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
@@ -38,7 +39,7 @@ func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 		for _, a := range linked {
 			size, deps := "-", "-"
 			if u := a.Facts.Size; u != nil {
-				size, deps = humanBytes(u.Total), humanBytes(u.Deps)
+				size, deps = sizer.Human(u.Total), sizer.Human(u.Deps)
 			}
 			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				relTo(a.Path, rep.Root, home), branchLabel(a.Worktree), dash(a.Agent), a.Verdict.Status,
@@ -49,7 +50,7 @@ func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 		}
 		line := summaryLine(linked)
 		if total, done, ok := usage([]model.RepoReport{rep}); ok {
-			line += fmt.Sprintf("  ·  %s, %s merged or empty", humanBytes(total), humanBytes(done))
+			line += fmt.Sprintf("  ·  %s, %s merged or empty", sizer.Human(total), sizer.Human(done))
 		}
 		_, _ = fmt.Fprintln(w, "\n"+line+"\n")
 	}
@@ -58,7 +59,7 @@ func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 			res.Scanned, pluralY(res.Scanned), res.Elapsed.Round(100*time.Millisecond), shown)
 		if total, done, measured := usage(res.Repos); measured {
 			_, _ = fmt.Fprintf(w, "Linked worktrees use about %s; %s of that is in merged or empty ones.\n",
-				humanBytes(total), humanBytes(done))
+				sizer.Human(total), sizer.Human(done))
 		}
 	}
 	return nil
@@ -79,23 +80,6 @@ func usage(reps []model.RepoReport) (total, done int64, measured bool) {
 		}
 	}
 	return total, done, measured
-}
-
-// humanBytes formats a byte count in decimal units, as Finder does.
-func humanBytes(n int64) string {
-	const unit = 1000
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	f, i := float64(n), 0
-	units := []string{"KB", "MB", "GB", "TB", "PB"}
-	for f /= unit; f >= unit && i < len(units)-1; f /= unit {
-		i++
-	}
-	if f < 10 {
-		return fmt.Sprintf("%.1f %s", f, units[i])
-	}
-	return fmt.Sprintf("%.0f %s", f, units[i])
 }
 
 func pluralY(n int) string {
