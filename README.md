@@ -10,7 +10,20 @@
 
 ## Quick Start
 
-zap is a single Go binary for macOS and Linux.
+zap is a single static binary for macOS and Linux (amd64 and arm64).
+
+**Download** the archive for your system from the
+[latest release](https://github.com/thecloudranger/zap/releases/latest), check it against
+`checksums.txt`, and put `zap` on your `PATH`:
+
+```bash
+tar xzf zap_*_darwin_arm64.tar.gz && mv zap ~/.local/bin/
+```
+
+The binary is not notarized: if macOS refuses to open a copy downloaded with a browser, run
+`xattr -d com.apple.quarantine ~/.local/bin/zap`.
+
+**Or build it** with Go 1.27+:
 
 ```bash
 go install github.com/thecloudranger/zap/cmd/zap@latest
@@ -131,6 +144,17 @@ ones show why, `e` shows every safety check for a worktree, `i` opts a repositor
 The first time you clean, zap asks you to read a short disclaimer and type `zap`. In scripts,
 `zap clean --yes` skips the confirmation (the disclaimer must have been accepted once), and
 `--json` gives machine-readable output.
+
+## With a coding agent
+
+[`skills/zap/SKILL.md`](skills/zap/SKILL.md) teaches an agent to use zap safely: look with
+`--json` and `--dry-run`, and remove only after you agree. For Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills/zap
+curl -fsSL https://raw.githubusercontent.com/thecloudranger/zap/main/skills/zap/SKILL.md \
+  -o ~/.claude/skills/zap/SKILL.md
+```
 
 ## Development
 
