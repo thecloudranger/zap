@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -66,7 +67,8 @@ func renderTree(w io.Writer, r MapResult, p palette, cols, height int) {
 			short[g] = []string{agentNames[lg.Agent] + " logs", "transcripts", "logs"}
 		}
 		for _, it := range lg.Items {
-			g.Children = append(g.Children, &treemap.Node{Label: it.Label, Weight: it.Bytes, Kind: k})
+			// The frame already says what this is; the block names the project, not its path.
+			g.Children = append(g.Children, &treemap.Node{Label: filepath.Base(it.Label), Weight: it.Bytes, Kind: k})
 		}
 		if len(g.Children) == 0 {
 			g.Kind = k // nothing inside to frame: draw it as one block

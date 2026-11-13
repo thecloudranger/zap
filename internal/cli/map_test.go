@@ -67,12 +67,13 @@ func TestRenderTree(t *testing.T) {
 	renderTree(&b, r, palette{}, 100, 20)
 	out := b.String()
 	assert.Contains(t, out, "Coding agents keep 1.8 GB on this disk. It has 13 GB free of 494 GB.")
-	for _, s := range []string{"Claude Code worktrees", "auth", "537 MB", "fix-login", "search", "~/dev/my-app", "Codex"} {
+	for _, s := range []string{"Claude Code worktrees", "auth", "537 MB", "fix-login", "search", "my-app", "Codex"} {
 		assert.Contains(t, out, s)
 	}
 	assert.Contains(t, out, "▒▒ merged or empty worktrees 940 MB")
 	assert.NotContains(t, out, "\x1b[")
 	assert.NotContains(t, out, "… MB", "sizes are never cut")
+	assert.NotContains(t, out, "~/dev/my-app", "tree blocks show the project folder, not its path")
 
 	lines := strings.Split(out, "\n")
 	grid := lines[2 : 2+20]

@@ -65,8 +65,8 @@ func newMapCmd(d Deps) *cobra.Command {
 		Short: "Draw what coding agents keep on this disk: worktrees, temp sessions, transcripts",
 		Long: "Scan every repository under the scan roots and the folders where agents keep their\n" +
 			"temp sessions and transcripts, then draw it to scale. Nothing is deleted.\n\n" +
-			"On a terminal at least 90 columns wide it draws nested blocks sized by disk use, like\n" +
-			"a disk treemap; piped or narrow, it lists agents and projects with bars.\n\n" +
+			"It lists agents and projects with bars; --tree (experimental) draws nested blocks sized\n" +
+			"by disk use, like a disk treemap.\n\n" +
 			"  ▒ merged or empty worktrees, which zap reviews for removal\n" +
 			"  █ worktrees in use\n" +
 			"  ▓ agent temp sessions\n" +
@@ -87,8 +87,7 @@ func newMapCmd(d Deps) *cobra.Command {
 			if tree && list {
 				return usageErr(errors.New("--tree and --list cannot be used together"))
 			}
-			// The picture on a wide terminal; the list when piped or narrow, where it reads better.
-			if tree || (!list && isTerminal(out) && termCols(out) >= 90) {
+			if tree { // experimental: the list is the default while the tree view is refined
 				renderTree(out, res, mapStyle(d, out), termCols(out), height)
 				return nil
 			}
@@ -98,8 +97,8 @@ func newMapCmd(d Deps) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "output a JSON envelope on stdout")
 	cmd.Flags().IntVar(&top, "top", 3, "projects to list under each kind of agent data")
-	cmd.Flags().BoolVar(&tree, "tree", false, "draw nested blocks sized by disk use (the default on a wide terminal)")
-	cmd.Flags().BoolVar(&list, "list", false, "list agents and projects with bars (the default when piped)")
+	cmd.Flags().BoolVar(&tree, "tree", false, "experimental: draw nested blocks sized by disk use, like a disk treemap")
+	cmd.Flags().BoolVar(&list, "list", false, "list agents and projects with bars (the default)")
 	cmd.Flags().IntVar(&height, "height", 22, "rows the --tree drawing uses")
 	return cmd
 }
@@ -317,11 +316,6 @@ func renderMap(w io.Writer, r MapResult, p palette, home string, top int) {
 	if temp+logs > 0 {
 		_, _ = fmt.Fprintln(w, "zap only reports temp sessions and transcripts; it does not delete them.")
 	}
-}
-
-func isTerminal(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // termCols is the terminal's width, or 100 when w is not a terminal.
