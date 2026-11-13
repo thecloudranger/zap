@@ -4,7 +4,7 @@
     <img src="assets/logo/lockup-light.svg" width="250" alt="zap">
   </picture>
   <p><b>Clean up after your coding agents.</b></p>
-  <p>zap finds the git worktrees that Claude Code, Codex, Cursor and you leave behind, removes the merged ones safely, with undo, and shows what else agents keep on your disk.</p>
+  <p>zap deletes the git worktrees your coding agents leave behind once their work is merged. You can undo it.</p>
   <a href="https://github.com/thecloudranger/zap/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/thecloudranger/zap/ci.yml?branch=main&style=flat-square&label=ci" alt="CI"></a>
   <a href="https://github.com/thecloudranger/zap/releases/latest"><img src="https://img.shields.io/github/v/release/thecloudranger/zap?style=flat-square" alt="Release"></a>
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/thecloudranger/zap?style=flat-square" alt="Go"></a>
@@ -16,11 +16,10 @@
 </p>
 
 > [!IMPORTANT]
-> **zap deletes only when you say so.** Worktrees are removed only by `zap clean` or the picker,
-> after you confirm, in repositories you opted in with a `.zap` file, and only when every safety
-> check passes. Branches are backed up first and `zap undo` brings them back. `scan`, `explain`,
-> `map`, `check` and `schedule` never delete anything, and zap never deletes agent temp sessions
-> or transcripts.
+> **zap deletes only when you tell it to.** `zap clean` and the picker ask first, and they only
+> touch repos that have a `.zap` file. Branches are backed up, and `zap undo` brings them back.
+> `scan`, `explain`, `map`, `check` and `schedule` never delete anything, and zap never deletes
+> agent temp sessions or transcripts.
 
 ## Install
 
@@ -165,8 +164,7 @@ why.
 
 ## Before the disk fills
 
-A cleanup script that fails quietly is how a 2 TB disk ends up full. `zap check` scans every
-repository under your scan roots and prints one line; it exits `3` when merged or empty worktrees
+`zap check` scans every repository under your scan roots and prints one line; it exits `3` when merged or empty worktrees
 use at least `--min-stale` (default 1 GB) or free space drops under `--min-free` (default 10 GB),
 so it fits cron, CI or a shell prompt. `zap schedule on` runs `zap check --notify` every day
 (`--every 6h` for more often) with a desktop notification: a launchd agent on macOS, a systemd
@@ -219,14 +217,13 @@ Coding agents keep 1.6 GB on this disk. It has 14 GB free of 494 GB.
 - **Hard-linked files** (a pnpm store, for example) are not counted, because removing one link
   frees nothing; `zap explain` reports them as shared.
 - **Free space** is what `df` reports for the disk holding your home folder.
-- **"Merged or empty"** is what zap's checks say about a worktree's work, not a promise that
-  `zap clean` will remove it: a safety check (an ignored `.env`, a running editor) can still
-  keep it.
+- **"Merged or empty"** describes the work in a worktree. A safety check (an ignored `.env`, an
+  open editor) can still keep the worktree when you clean.
 
 ## With a coding agent
 
-[`skills/zap/SKILL.md`](skills/zap/SKILL.md) teaches an agent to use zap safely: look with
-`--json` and `--dry-run`, and remove only after you agree. For Claude Code:
+[`skills/zap/SKILL.md`](skills/zap/SKILL.md) tells an agent to look first, with `--json` and
+`--dry-run`, and delete only after you agree. For Claude Code:
 
 ```bash
 mkdir -p ~/.claude/skills/zap
