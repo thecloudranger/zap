@@ -6,6 +6,13 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Fixed
+
+- The release now publishes the Homebrew cask, so `brew install thecloudranger/tap/zap`
+  works. 0.2.0 shipped its binaries but not the cask.
+
 ## [0.2.0]
 
 ### Added

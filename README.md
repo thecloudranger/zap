@@ -1,6 +1,8 @@
 <div align="center">
-  <img src="assets/logo/zap.svg" width="88" alt="zap logo: a git branch whose fork is a lightning bolt">
-  <h1>zap</h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
+    <img src="assets/logo/lockup-light.svg" width="250" alt="zap">
+  </picture>
   <p><b>Clean up after your coding agents.</b></p>
   <p>zap finds the git worktrees that Claude Code, Codex, Cursor and you leave behind, removes the merged ones safely, with undo, and shows what else agents keep on your disk.</p>
   <a href="https://github.com/thecloudranger/zap/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/thecloudranger/zap/ci.yml?branch=main&style=flat-square&label=ci" alt="CI"></a>
