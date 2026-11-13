@@ -122,10 +122,10 @@ func renderTree(w io.Writer, r MapResult, p palette, cols, height int) {
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "  "+strings.Join(legend, "    "))
 	if stale > 0 {
-		_, _ = fmt.Fprintln(w, "\nRun zap to review the merged and empty worktrees; its safety checks decide what goes.")
+		_, _ = fmt.Fprintln(w, "\nRun zap to see which merged and empty worktrees it can delete.")
 	}
 	if temp+logs > 0 {
-		_, _ = fmt.Fprintln(w, "zap only reports temp sessions and transcripts; it does not delete them.")
+		_, _ = fmt.Fprintln(w, "zap leaves temp sessions and transcripts on disk.")
 	}
 }
 

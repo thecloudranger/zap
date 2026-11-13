@@ -34,7 +34,7 @@ func TestRenderMap(t *testing.T) {
 	assert.Contains(t, out, "29 sessions in ~/tmp/claude-1000")
 	assert.Contains(t, out, "1 more project")
 	assert.Contains(t, out, "needed to resume them")
-	assert.Contains(t, out, "it does not delete them")
+	assert.Contains(t, out, "zap leaves temp sessions and transcripts on disk.")
 	assert.NotContains(t, out, "\x1b[", "no colour without a terminal")
 
 	lines := strings.Split(out, "\n")

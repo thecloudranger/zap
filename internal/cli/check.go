@@ -139,6 +139,6 @@ func renderCheck(w io.Writer, r CheckResult) {
 		_, _ = fmt.Fprintf(w, "Agent temp files and transcripts use %s more; see zap map.\n", sizer.Human(r.Leftovers))
 	}
 	if r.overStale() {
-		_, _ = fmt.Fprintln(w, "Run zap to review them; its safety checks decide what goes.")
+		_, _ = fmt.Fprintln(w, "Run zap to see which ones it can delete.")
 	}
 }

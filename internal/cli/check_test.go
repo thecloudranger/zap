@@ -41,7 +41,7 @@ func TestCheck(t *testing.T) {
 	assert.Contains(t, out, "1 merged or empty worktree uses")
 	assert.Contains(t, out, "free of")
 	assert.Contains(t, out, "see zap map")
-	assert.Contains(t, out, "Run zap to review them")
+	assert.Contains(t, out, "Run zap to see which ones it can delete.")
 	assert.Empty(t, notes, "no notification without --notify")
 
 	_, code = s.run("check", "--min-stale", "0", "--min-free", "0", "--notify")
@@ -55,7 +55,7 @@ func TestCheck(t *testing.T) {
 
 	out, code = s.run("check", "--min-stale", "100GB", "--min-free", "1PB")
 	assert.Equal(t, ExitAttention, code, "a full disk alone is worth flagging")
-	assert.NotContains(t, out, "Run zap to review them")
+	assert.NotContains(t, out, "Run zap to see which ones it can delete.")
 
 	out, code = s.run("check", "--json", "--min-stale", "0")
 	assert.Equal(t, ExitAttention, code)
