@@ -116,13 +116,20 @@ func (Missing) Eval(_ context.Context, s *Subject) model.CheckResult {
 	return model.CheckResult{Outcome: model.NoMatch, Detail: "folder exists"}
 }
 
-// Empty matches when the worktree's ref never moved since it was created: a fresh
-// worktree whose tip is on the target only because nothing was committed yet.
-// Without a reflog it is skipped, so the worktree falls through to the merge checks.
+// Empty matches when the worktree's ref never moved since it was created and its tip
+// is already on the target: a fresh worktree nobody committed to. Both halves are
+// needed. A ref that never moved can still hold unmerged work when it was created
+// from another branch (`git worktree add -b x origin/feature`), and a branch that
+// zap undo recreated has a one-entry reflog whatever it held before, so it is left
+// to the merge checks. Without a reflog the check is skipped the same way.
 type Empty struct{}
 
 // Name implements Check.
 func (Empty) Name() string { return "empty" }
+
+// restoredPrefix is the reflog message of a branch that `zap undo` recreated from
+// its backup ref (`git branch -- <name> refs/zap/backup/...`).
+const restoredPrefix = "branch: Created from refs/zap/"
 
 // Eval implements Check.
 func (Empty) Eval(ctx context.Context, s *Subject) model.CheckResult {
@@ -133,19 +140,32 @@ func (Empty) Eval(ctx context.Context, s *Subject) model.CheckResult {
 		}
 		dir, ref = s.WT.Path, "HEAD"
 	}
-	shas, err := gitx.ReflogSHAs(ctx, s.Git, dir, ref)
+	entries, err := gitx.ReflogEntries(ctx, s.Git, dir, ref)
 	if err != nil {
 		return model.CheckResult{Outcome: model.Skipped, Detail: "no reflog: " + firstLine(err.Error())}
 	}
-	if len(shas) == 0 {
+	if len(entries) == 0 {
 		return model.CheckResult{Outcome: model.Skipped, Detail: "no reflog"}
 	}
-	for _, sha := range shas {
-		if sha != s.WT.Head {
-			return model.CheckResult{Outcome: model.NoMatch, Detail: fmt.Sprintf("%s moved %d time(s) since creation", shortRef(ref), len(shas)-1)}
+	if strings.HasPrefix(entries[len(entries)-1].Subject, restoredPrefix) {
+		return model.CheckResult{Outcome: model.Skipped, Detail: "restored by zap undo, so its reflog starts at the restore"}
+	}
+	for _, e := range entries {
+		if e.SHA != s.WT.Head {
+			return model.CheckResult{Outcome: model.NoMatch, Detail: fmt.Sprintf("%s moved %d time(s) since creation", shortRef(ref), len(entries)-1)}
 		}
 	}
-	return model.CheckResult{Outcome: model.Match, Detail: fmt.Sprintf("no commits of its own since it was created at %s", short(s.WT.Head))}
+	onTarget := eachRef(s, func(target string) (bool, error) {
+		return gitx.IsAncestor(ctx, s.Git, s.Repo.Root, s.head(), target)
+	}, "", "")
+	switch onTarget.Outcome {
+	case model.Match:
+		return model.CheckResult{Outcome: model.Match, Detail: fmt.Sprintf("no commits of its own since it was created at %s", short(s.WT.Head))}
+	case model.NoMatch:
+		return model.CheckResult{Outcome: model.NoMatch, Detail: fmt.Sprintf("never moved, but it was created at %s, which is not in %s", short(s.WT.Head), strings.Join(shortRefs(s.Target.Refs), ", "))}
+	default:
+		return onTarget
+	}
 }
 
 func firstLine(s string) string {

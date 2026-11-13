@@ -39,8 +39,8 @@ const (
 	cherryOrigin = "cherry refs/remotes/origin/main refs/heads/feat"
 	mtMain       = "merge-tree --write-tree --no-messages refs/heads/main refs/heads/feat"
 	mtOrigin     = "merge-tree --write-tree --no-messages refs/remotes/origin/main refs/heads/feat"
-	featReflog   = "reflog show --format=%H refs/heads/feat --"
-	headReflog   = "reflog show --format=%H HEAD --"
+	featReflog   = "reflog show --format=%H%x00%gs refs/heads/feat --"
+	headReflog   = "reflog show --format=%H%x00%gs HEAD --"
 	moved        = "abcdef1234\n1111111111\n"
 )
 
@@ -115,8 +115,37 @@ func TestEvaluate(t *testing.T) {
 		{
 			"never-moved branch is empty, not merged",
 			feat,
-			fakeGit{featReflog: "abcdef1234\nabcdef1234\n"},
+			fakeGit{
+				featReflog: "abcdef1234\x00reset: moving to HEAD\nabcdef1234\x00branch: Created from HEAD\n",
+				"merge-base --is-ancestor refs/heads/feat refs/heads/main": nil,
+			},
 			false, model.StatusEmpty, 2,
+		},
+		{
+			"never moved but created from unmerged work is not empty",
+			feat,
+			fakeGit{
+				featReflog: "abcdef1234\x00branch: Created from origin/feature\n",
+				"merge-base --is-ancestor refs/heads/feat refs/heads/main":          no,
+				"merge-base --is-ancestor refs/heads/feat refs/remotes/origin/main": no,
+				"diff --quiet refs/heads/main...refs/heads/feat --":                 no,
+				"diff --quiet refs/remotes/origin/main...refs/heads/feat --":        no,
+				cherryMain:   "+ abcdef1234\n",
+				cherryOrigin: "+ abcdef1234\n",
+				mtMain:       no,
+				mtOrigin:     no,
+				featUpstream: "origin/feature\x00\n",
+			},
+			false, model.StatusActive, 8,
+		},
+		{
+			"a branch zap undo restored is judged by the merge checks, not as empty",
+			feat,
+			fakeGit{
+				featReflog: "abcdef1234\x00branch: Created from refs/zap/backup/20261113T101500/feat\n",
+				"merge-base --is-ancestor refs/heads/feat refs/heads/main": nil,
+			},
+			false, model.StatusMerged, 3,
 		},
 		{
 			"detached empty uses the worktree HEAD reflog; all=true keeps going after a match",

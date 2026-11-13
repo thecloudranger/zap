@@ -186,14 +186,29 @@ func AdminDir(commonDir, wtPath string) (string, error) {
 	return "", fmt.Errorf("gitx: no admin dir for worktree %s", wtPath)
 }
 
-// ReflogSHAs returns the commits a ref's reflog has pointed at, newest first. An empty
-// result means the reflog is missing (reflogs disabled or expired).
-func ReflogSHAs(ctx context.Context, r Runner, dir, ref string) ([]string, error) {
-	out, err := r.Run(ctx, dir, "reflog", "show", "--format=%H", ref, "--")
+// ReflogEntry is one step in a ref's reflog: the commit it pointed at and git's
+// message for the move ("branch: Created from HEAD", "commit: fix login").
+type ReflogEntry struct {
+	SHA     string
+	Subject string
+}
+
+// ReflogEntries returns a ref's reflog, newest first, so the last entry is the one
+// that created the ref. An empty result means the reflog is missing (reflogs
+// disabled or expired).
+func ReflogEntries(ctx context.Context, r Runner, dir, ref string) ([]ReflogEntry, error) {
+	out, err := r.Run(ctx, dir, "reflog", "show", "--format=%H%x00%gs", ref, "--")
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(string(out)), nil
+	var entries []ReflogEntry
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		sha, subject, _ := strings.Cut(line, "\x00")
+		if sha = strings.TrimSpace(sha); sha != "" {
+			entries = append(entries, ReflogEntry{SHA: sha, Subject: subject})
+		}
+	}
+	return entries, nil
 }
 
 // UpdateRef points ref at sha.

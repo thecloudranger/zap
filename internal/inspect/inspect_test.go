@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,6 +49,10 @@ func TestRepoScenarios(t *testing.T) {
 
 	fresh := testkit.AddWorktree(t, repo, ".claude/worktrees/fresh", "worktree-fresh")
 
+	// A new worktree branched from someone's unmerged commits never moves, yet holds work.
+	pickup := filepath.Join(repo, ".worktrees", "pickup")
+	testkit.Git(t, repo, "worktree", "add", "-q", "-b", "pickup", pickup, "open")
+
 	rep, err := Repo(t.Context(), gitx.Exec{}, open, Options{})
 	require.NoError(t, err)
 	assert.Equal(t, repo, rep.Root)
@@ -68,6 +73,7 @@ func TestRepoScenarios(t *testing.T) {
 		gone:     model.StatusMissing,
 		detached: model.StatusEmpty,
 		fresh:    model.StatusEmpty,
+		pickup:   model.StatusActive,
 	}
 	require.Len(t, got, len(want))
 	for path, status := range want {

@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thecloudranger/zap/internal/gitx"
+	"github.com/thecloudranger/zap/internal/inspect"
+	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/oplog"
 	"github.com/thecloudranger/zap/internal/plan"
 	"github.com/thecloudranger/zap/internal/testkit"
@@ -71,6 +73,15 @@ func TestZapThenUndoRoundTrip(t *testing.T) {
 	assert.NoDirExists(t, gone, "a folder that was already gone is not recreated")
 	wts := testkit.Git(t, repo, "worktree", "list")
 	assert.NotContains(t, wts, empty, "occupied path is left alone")
+
+	// A restored branch has a one-entry reflog; the next scan must still call it merged.
+	rep, err := inspect.Repo(t.Context(), gitx.Exec{}, repo, inspect.Options{})
+	require.NoError(t, err)
+	for _, a := range rep.Worktrees {
+		if a.Path == merged {
+			assert.Equal(t, model.StatusMerged, a.Verdict.Status, a.Verdict.Reason)
+		}
+	}
 
 	_, _, err = Undo(t.Context(), gitx.Exec{}, log, Options{Now: time.Now})
 	assert.ErrorIs(t, err, ErrNothingToUndo, "a run is undone only once")
