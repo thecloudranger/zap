@@ -1,10 +1,14 @@
 <div align="center">
   <h1>⚡ zap</h1>
-  <p><b>Find stale git worktrees and remove them safely.</b></p>
+  <p><b>Clean up after your coding agents: remove merged git worktrees safely, with undo.</b></p>
   <a href="https://github.com/thecloudranger/zap/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/thecloudranger/zap/ci.yml?branch=main&style=flat-square&label=ci" alt="CI"></a>
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/thecloudranger/zap?style=flat-square" alt="Go"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
 </div>
+
+<p align="center">
+  <img src="assets/demo/zap.gif" alt="zap scanning a demo machine, drawing what agents keep on disk, checking free space, explaining a squash-merged worktree, zapping three worktrees in the picker and undoing it" width="900">
+</p>
 
 > zap is in early development. It only deletes in repositories that opted in with a `.zap` file.
 
@@ -12,7 +16,13 @@
 
 zap is a single static binary for macOS and Linux (amd64 and arm64).
 
-**Download** the archive for your system from the
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install thecloudranger/tap/zap
+```
+
+**Or download** the archive for your system from the
 [latest release](https://github.com/thecloudranger/zap/releases/latest), check it against
 `checksums.txt`, and put `zap` on your `PATH`:
 

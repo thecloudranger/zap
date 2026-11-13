@@ -1,3 +1,7 @@
 docs/
 /zap
 /dist/
+/assets/demo/*.mp4
+/assets/demo/*.gif
+!/assets/demo/zap.gif
+.DS_Store

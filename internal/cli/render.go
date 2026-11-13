@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -194,15 +195,36 @@ func relTo(p, root, home string) string {
 	return tildify(p, home)
 }
 
+// tildify shows p as ~/... when it is under home. git reports resolved paths, so a
+// home reached through a symlink (macOS /tmp is /private/tmp) is matched both ways.
 func tildify(p, home string) string {
 	if home == "" {
 		return p
 	}
-	if p == home {
-		return "~"
-	}
-	if rest, ok := strings.CutPrefix(p, home+string(filepath.Separator)); ok {
-		return filepath.Join("~", rest)
+	for _, h := range homeForms(home) {
+		if p == h {
+			return "~"
+		}
+		if rest, ok := strings.CutPrefix(p, h+string(filepath.Separator)); ok {
+			return filepath.Join("~", rest)
+		}
 	}
 	return p
+}
+
+var resolvedHomes sync.Map // home -> its path with symlinks resolved
+
+func homeForms(home string) []string {
+	r, ok := resolvedHomes.Load(home)
+	if !ok {
+		real, err := filepath.EvalSymlinks(home)
+		if err != nil {
+			real = home
+		}
+		r, _ = resolvedHomes.LoadOrStore(home, real)
+	}
+	if real := r.(string); real != home {
+		return []string{home, real}
+	}
+	return []string{home}
 }

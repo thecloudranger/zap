@@ -6,6 +6,32 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0]
+
+### Added
+
+- `zap check`: one line on merged or empty worktrees and free disk space. Exits 3 when
+  they use at least `--min-stale` (default 1 GB) or free space is under `--min-free`
+  (default 10 GB), for cron, CI or a shell prompt. `--notify` adds a desktop notification.
+- `zap schedule on|off|status`: run `zap check --notify` every day (`--every` to change)
+  with a launchd agent on macOS or a systemd user timer on Linux; prints a cron line on
+  Termux. It never deletes anything.
+- `zap map`: what coding agents keep on the disk, to scale: worktrees per agent, Claude
+  Code temp sessions in `/tmp/claude-<uid>`, and Claude Code and Codex transcripts. Temp
+  sessions and transcripts are reported only, never deleted. `--tree` (experimental) draws
+  nested blocks sized by disk use.
+- `scan --all` and `clean` show the disk's free space and total.
+- Install with Homebrew: `brew install thecloudranger/tap/zap`.
+
+### Fixed
+
+- A worktree created from someone else's unmerged commits
+  (`git worktree add -b x origin/feature`) was reported `empty` and offered for removal.
+  `empty` now also requires the tip to be in the target branch.
+- After `zap undo`, a restored merged worktree was reported `empty` instead of `merged`.
+- With a home folder reached through a symlink, paths were shown in full instead of as
+  `~/...`.
+
 ## [0.1.0]
 
 First release.

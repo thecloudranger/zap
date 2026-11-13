@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,4 +51,16 @@ func TestHuman(t *testing.T) {
 	} {
 		assert.Equal(t, want, sizer.Human(n), "%d", n)
 	}
+}
+
+func TestTildifyThroughSymlink(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	realResolved, _ := filepath.EvalSymlinks(real)
+	assert.Equal(t, "~/dev/api", tildify(filepath.Join(realResolved, "dev", "api"), link), "git reports the resolved path")
+	assert.Equal(t, "~/dev/api", tildify(filepath.Join(link, "dev", "api"), link))
+	assert.Equal(t, "/elsewhere/x", tildify("/elsewhere/x", link))
 }

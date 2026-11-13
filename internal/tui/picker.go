@@ -437,9 +437,18 @@ func (p *Picker) review() string {
 	return b.String()
 }
 
+// short shows path as ~/... under home. git reports resolved paths, so a home reached
+// through a symlink (macOS /tmp is /private/tmp) is matched in both forms.
 func (p *Picker) short(path string) string {
-	if p.home != "" {
-		if rest, ok := strings.CutPrefix(path, p.home+string(filepath.Separator)); ok {
+	if p.home == "" {
+		return path
+	}
+	homes := []string{p.home}
+	if real, err := filepath.EvalSymlinks(p.home); err == nil && real != p.home {
+		homes = append(homes, real)
+	}
+	for _, h := range homes {
+		if rest, ok := strings.CutPrefix(path, h+string(filepath.Separator)); ok {
 			return "~/" + rest
 		}
 	}

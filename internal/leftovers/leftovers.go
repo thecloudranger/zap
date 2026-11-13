@@ -235,8 +235,14 @@ func names(parts []string) []string {
 }
 
 func tildify(p, home string) string {
-	if home != "" && (p == home || strings.HasPrefix(p, home+string(filepath.Separator))) {
-		return "~" + strings.TrimPrefix(p, home)
+	forms := []string{home}
+	if real, err := filepath.EvalSymlinks(home); err == nil && real != home {
+		forms = append(forms, real) // the found paths are resolved; home may not be
+	}
+	for _, h := range forms {
+		if h != "" && (p == h || strings.HasPrefix(p, h+string(filepath.Separator))) {
+			return "~" + strings.TrimPrefix(p, h)
+		}
 	}
 	return p
 }

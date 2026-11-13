@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -200,4 +202,16 @@ func TestIdleIsOfferedNotPreselected(t *testing.T) {
 	press(t, p, "j", "j", "j", "space")
 	n, _ = p.count()
 	assert.Equal(t, 3, n, "idle can be picked by hand")
+}
+
+func TestShortThroughSymlink(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	resolved, _ := filepath.EvalSymlinks(real)
+	p := New(nil, link, nil)
+	assert.Equal(t, "~/dev/api", p.short(filepath.Join(resolved, "dev", "api")), "git reports the resolved path")
+	assert.Equal(t, "~/dev/api", p.short(filepath.Join(link, "dev", "api")))
 }
