@@ -5,6 +5,7 @@
   </picture>
   <p><b>Clean up after your coding agents.</b></p>
   <p>zap deletes the git worktrees your coding agents leave behind once you’ve merged their work. You can undo it.</p>
+  <p><a href="https://getzap.dev">getzap.dev</a></p>
   <a href="https://github.com/thecloudranger/zap/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/thecloudranger/zap/ci.yml?branch=main&style=flat-square&label=ci" alt="CI"></a>
   <a href="https://github.com/thecloudranger/zap/releases/latest"><img src="https://img.shields.io/github/v/release/thecloudranger/zap?style=flat-square" alt="Release"></a>
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/thecloudranger/zap?style=flat-square" alt="Go"></a>

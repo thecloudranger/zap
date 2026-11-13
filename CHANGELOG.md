@@ -6,6 +6,18 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3]
+
+### Changed
+
+- `zap check` and `zap map` end with plainer advice: "Run zap to see which ones it can
+  delete." `zap map` says "zap leaves temp sessions and transcripts on disk."
+- The README links to the website, [getzap.dev](https://getzap.dev), and explains each
+  command in plain words.
+- Bug reports use a short form (what happened, the output, version and OS), and
+  `SECURITY.md` explains how to report it privately when zap deletes something it should
+  have kept.
+
 ## [0.2.2]
 
 ### Fixed
