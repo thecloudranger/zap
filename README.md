@@ -1,67 +1,63 @@
 <div align="center">
-  <h1>⚡ zap</h1>
-  <p><b>Clean up after your coding agents: remove merged git worktrees safely, with undo.</b></p>
+  <img src="assets/logo/zap.svg" width="88" alt="zap logo: a git branch whose fork is a lightning bolt">
+  <h1>zap</h1>
+  <p><b>Clean up after your coding agents.</b></p>
+  <p>zap finds the git worktrees that Claude Code, Codex, Cursor and you leave behind, removes the merged ones safely, with undo, and shows what else agents keep on your disk.</p>
   <a href="https://github.com/thecloudranger/zap/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/thecloudranger/zap/ci.yml?branch=main&style=flat-square&label=ci" alt="CI"></a>
+  <a href="https://github.com/thecloudranger/zap/releases/latest"><img src="https://img.shields.io/github/v/release/thecloudranger/zap?style=flat-square" alt="Release"></a>
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/thecloudranger/zap?style=flat-square" alt="Go"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
 </div>
 
 <p align="center">
-  <img src="assets/demo/zap.gif" alt="zap scanning a demo machine, drawing what agents keep on disk, checking free space, explaining a squash-merged worktree, zapping three worktrees in the picker and undoing it" width="900">
+  <img src="assets/demo/zap.gif" alt="zap on a demo machine: scan --all lists five worktrees, map draws what agents keep on disk, check reports free space, explain shows why a squash-merged worktree counts as merged, the picker zaps three worktrees after showing their safety checks, and undo brings them back" width="900">
 </p>
 
-> zap is in early development. It only deletes in repositories that opted in with a `.zap` file.
+> [!IMPORTANT]
+> **zap deletes only when you say so.** Worktrees are removed only by `zap clean` or the picker,
+> after you confirm, in repositories you opted in with a `.zap` file, and only when every safety
+> check passes. Branches are backed up first and `zap undo` brings them back. `scan`, `explain`,
+> `map`, `check` and `schedule` never delete anything, and zap never deletes agent temp sessions
+> or transcripts.
 
-## Quick Start
+## Install
 
 zap is a single static binary for macOS and Linux (amd64 and arm64).
-
-**Homebrew** (macOS and Linux):
 
 ```bash
 brew install thecloudranger/tap/zap
 ```
 
-**Or download** the archive for your system from the
+Or download the archive for your system from the
 [latest release](https://github.com/thecloudranger/zap/releases/latest), check it against
-`checksums.txt`, and put `zap` on your `PATH`:
+`checksums.txt`, and put `zap` on your `PATH`. The binary is not notarized: if macOS refuses to
+open a copy downloaded with a browser, run `xattr -d com.apple.quarantine ~/.local/bin/zap`.
+With Go 1.27+: `go install github.com/thecloudranger/zap/cmd/zap@latest`.
 
-```bash
-tar xzf zap_*_darwin_arm64.tar.gz && mv zap ~/.local/bin/
-```
-
-The binary is not notarized: if macOS refuses to open a copy downloaded with a browser, run
-`xattr -d com.apple.quarantine ~/.local/bin/zap`.
-
-**Or build it** with Go 1.27+:
-
-```bash
-go install github.com/thecloudranger/zap/cmd/zap@latest
-```
-
-**Run**
+## Use
 
 ```bash
 zap                      # Interactive picker: choose, review, zap
 zap scan                 # List worktrees of the repo you're in
-zap scan ~/dev/my-app    # …or of any repo by path
 zap scan --all           # …or of every repo under your scan roots
-zap scan --json          # JSON output for scripts and agents
-zap scan --no-size       # Skip measuring disk use
 zap explain <path>       # Why a worktree got its status: every check, pass/fail
+zap map                  # What coding agents keep on this disk
+zap check                # One line on merged or empty worktrees and free disk space
 
 zap init                 # Opt this repo in to cleaning (writes .zap)
 zap clean --dry-run      # Show what would be removed, and what is kept and why
-zap clean                # Remove them, after a confirmation
-zap clean --all          # …in every opted-in repo at once
+zap clean                # Remove them, after a confirmation (--all: every opted-in repo)
 zap history              # What zap removed, with backup refs
 zap undo                 # Bring back what the last clean removed
-zap roots                # Show or change where --all looks (zap roots add|remove|reset)
-zap check                # One line on merged or empty worktrees and free disk space
 zap schedule on          # Run `zap check --notify` every day; it never deletes
-zap map                  # Draw what coding agents keep on this disk
-zap version              # Show version
+zap roots                # Show or change where --all looks (zap roots add|remove|reset)
 ```
+
+Add `--json` to `scan`, `explain`, `clean`, `check` or `map` for scripts and agents, and
+`--no-size` to `scan` to skip measuring disk use.
+
+<details>
+<summary>Example: <code>zap scan --all</code></summary>
 
 ```text
 $ zap scan --all
@@ -82,7 +78,12 @@ $ zap scan --all
 
 Scanned 2 repositories in 1.2s; 2 with linked worktrees. Roots: zap roots
 Linked worktrees use about 2.2 GB; 1.5 GB of that is in merged or empty ones.
+The disk has 14 GB free of 494 GB.
 ```
+
+</details>
+
+## How zap decides
 
 | Status | Meaning |
 |---|---|
@@ -94,24 +95,80 @@ Linked worktrees use about 2.2 GB; 1.5 GB of that is in merged or empty ones.
 | `active` | Anything else |
 
 The target branch is `origin/HEAD`, then `main`, then `master`; override it with `--target`.
-AGENT is guessed from the folder a worktree lives in (for example `.claude/worktrees` or
-`~/.codex/worktrees`). `zap scan` outside a repository, or with `--all`, searches `~/dev`, `~/code`,
-`~/src`, `~/projects` and known agent worktree folders; `zap roots` changes that list.
-Add `--fetch` to `scan`, `explain` or `clean` to fetch remotes first, so pull requests merged on
-GitHub are seen. Add `--gh` to also ask GitHub (through the `gh` CLI) for merged pull requests; one
-only counts if its head commit is exactly the branch tip.
+AGENT is guessed from the folder a worktree lives in (`.claude/worktrees`, `~/.codex/worktrees`,
+`~/.cursor/worktrees`, `conductor/workspaces`, `.t3/worktrees`). `zap scan --all` searches `~/dev`,
+`~/code`, `~/src`, `~/projects`, and the agent folders that sit outside repositories
+(`~/.codex/worktrees`, `~/.cursor/worktrees`, `~/conductor/workspaces`, `~/.t3/worktrees`).
+Add `--fetch` to see pull requests merged
+on the remote, and `--gh` to also ask GitHub through the `gh` CLI; a pull request only counts if
+its head commit is exactly the branch tip.
 
-SIZE is what removing a worktree would free, measured like `du`; DEPS is the part of it in
-dependency and build folders such as `node_modules`, `.venv` and `target`. Hard-linked files
-(a pnpm store, for example) are not counted, because removing one link frees nothing;
-`zap explain` reports them as shared.
+## Removing
+
+`zap clean` only acts in repositories that contain a `.zap` file at their root. Everywhere else
+it shows what it would do and changes nothing. Commit `.zap` so everyone on the repo shares the
+same rules:
+
+```toml
+# .zap (every key is optional; these are the defaults)
+# target = "main"                       # default: origin/HEAD, then main, then master
+rules         = ["merged", "empty", "missing"]   # "gone" and "idle" can be added
+min_age       = "1d"                    # skip anything active more recently (m, h, d, w)
+idle_after    = "30d"                   # when an unmerged worktree counts as idle
+delete_branch = true
+protect       = ["main", "master"]      # branch globs that are never removed
+keep_ignored  = [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"]
+```
+
+A worktree is removed only if it passes every check:
+
+- not the main worktree, and not on a protected or target branch
+- not locked with `git worktree lock` (a lock naming a process that is no longer running is
+  reported as stale; `--unlock-stale` releases it)
+- no uncommitted or untracked changes, and no files whose changes git status is told to hide
+  (`assume-unchanged`, or `skip-worktree` outside a sparse checkout)
+- no ignored files matching `keep_ignored`, such as `.env` or keys, which are not in git
+- no activity within `min_age`
+- no other process (a shell, editor or agent) working inside it, and not the directory you
+  run zap from
+
+If a check cannot run, the worktree is kept, and zap re-checks each one right before removing it.
+Branches are deleted only when their work is provably in the target (or they have none); a
+`gone` or `missing` worktree with unmerged commits keeps its branch. Idle worktrees are never
+removed by `zap clean`: the picker offers them unselected, and removing one keeps its branch.
+
+> [!NOTE]
+> Before deleting a branch, zap saves its tip under `refs/zap/backup/`. `zap undo` recreates the
+> branches and re-adds the worktrees at their old paths (`zap history` lists runs, `zap undo <RUN>`
+> picks one). Files git ignores inside a removed worktree (`node_modules`, build output, caches)
+> are deleted for good.
+
+The first time you clean, zap shows a short disclaimer and asks you to type `zap`. In scripts,
+`zap clean --yes` skips the confirmation once the disclaimer has been accepted.
+
+### The picker
+
+`zap` with no command opens a picker. Worktrees zap would remove start selected; kept ones show
+why.
+
+| Key | Does |
+|---|---|
+| `↑` `↓` | Move |
+| `space` | Select or unselect a worktree |
+| `a` | Select or unselect a whole repository; `[` `]` jump between repositories |
+| `e` | Show every safety check for a worktree |
+| `i` | Opt the repository in (writes `.zap`) |
+| `enter` | Review the selection; then `y` zaps, `n` goes back |
+| `q` | Quit without changing anything |
 
 ## Before the disk fills
 
 A cleanup script that fails quietly is how a 2 TB disk ends up full. `zap check` scans every
 repository under your scan roots and prints one line; it exits `3` when merged or empty worktrees
 use at least `--min-stale` (default 1 GB) or free space drops under `--min-free` (default 10 GB),
-so it fits cron, CI or a shell prompt. It never deletes anything.
+so it fits cron, CI or a shell prompt. `zap schedule on` runs `zap check --notify` every day
+(`--every 6h` for more often) with a desktop notification: a launchd agent on macOS, a systemd
+user timer on Linux, a cron line to add yourself on Termux. `zap schedule off` removes it.
 
 ```text
 $ zap check
@@ -120,13 +177,12 @@ Agent temp files and transcripts use 23 MB more; see zap map.
 Run zap to review them; its safety checks decide what goes.
 ```
 
-`zap schedule on` runs `zap check --notify` every day (`--every 6h` for more often) and shows a
-desktop notification when a limit is passed: a launchd agent on macOS, a systemd user timer on
-Linux. On Termux it prints a cron line to add yourself. `zap schedule off` removes it.
-
 Agents keep more than worktrees. `zap map` draws all of it to scale: worktrees per agent, Claude
 Code's temp sessions in `/tmp/claude-<uid>`, and the transcripts Claude Code and Codex need to
-resume a session. It only reports temp sessions and transcripts; it does not delete them.
+resume a session.
+
+<details>
+<summary>Example: <code>zap map</code></summary>
 
 ```text
 $ zap map
@@ -151,57 +207,19 @@ Coding agents keep 1.6 GB on this disk. It has 14 GB free of 494 GB.
   Codex transcripts            803 KB  ░                               1 session, needed to resume them
 ```
 
-## Cleaning safely
+</details>
 
-`zap clean` only acts in repositories that contain a `.zap` file at their root. Everywhere
-else it shows what it would do and changes nothing. Commit `.zap` so everyone on the repo
-shares the same rules:
+## What it measures
 
-```toml
-# .zap (every key is optional; these are the defaults)
-# target = "main"                       # default: origin/HEAD, then main, then master
-rules         = ["merged", "empty", "missing"]   # "gone" and "idle" can be added
-min_age       = "1d"                    # skip anything active more recently (m, h, d, w)
-idle_after    = "30d"                   # when an unmerged worktree counts as idle
-delete_branch = true
-protect       = ["main", "master"]      # branch globs that are never removed
-keep_ignored  = [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.tfstate"]
-```
-
-A worktree is removed only if it passes every check:
-
-- not the main worktree, and not on a protected or target branch
-- not locked with `git worktree lock`
-- no uncommitted or untracked changes, and no files whose changes git status is told to hide
-  (`assume-unchanged`, or `skip-worktree` outside a sparse checkout)
-- no ignored files matching `keep_ignored`, such as `.env` or keys, which are not in git
-- no activity within `min_age`
-- no other process (a shell, editor or agent) working inside it, and not the directory you
-  run zap from
-
-If a check cannot run, the worktree is kept. zap re-checks each worktree right before removing
-it and skips anything that changed.
-
-A lock whose reason names a process that is no longer running is reported as stale;
-`zap clean --unlock-stale` releases it. Idle worktrees are never removed by `zap clean`: the
-picker offers them unselected, and removing one keeps its branch.
-
-Branches are deleted only when their work is provably in the target (or they have none);
-a `gone` or `missing` worktree with unmerged commits loses its folder or registration but keeps
-its branch. Before deleting a branch, zap saves its tip under `refs/zap/backup/`.
-
-`zap undo` brings back the last run: it recreates the branches from those backups and re-adds
-the worktrees at their old paths (`zap history` lists runs; `zap undo <RUN>` picks one). Other
-files git ignores inside a removed worktree (`node_modules`, build output, caches) are deleted
-for good and cannot be restored.
-
-Running `zap` with no command opens a picker: worktrees zap would remove start selected, kept
-ones show why, `e` shows every safety check for a worktree, `i` opts a repository in, and
-`enter` reviews the selection before anything is removed.
-
-The first time you clean, zap asks you to read a short disclaimer and type `zap`. In scripts,
-`zap clean --yes` skips the confirmation (the disclaimer must have been accepted once), and
-`--json` gives machine-readable output.
+- **SIZE** is what removing a worktree would free, measured like `du`: allocated blocks, not
+  file lengths. **DEPS** is the part of it in dependency and build folders such as
+  `node_modules`, `.venv` and `target`.
+- **Hard-linked files** (a pnpm store, for example) are not counted, because removing one link
+  frees nothing; `zap explain` reports them as shared.
+- **Free space** is what `df` reports for the disk holding your home folder.
+- **"Merged or empty"** is what zap's checks say about a worktree's work, not a promise that
+  `zap clean` will remove it: a safety check (an ignored `.env`, a running editor) can still
+  keep it.
 
 ## With a coding agent
 
@@ -220,6 +238,7 @@ curl -fsSL https://raw.githubusercontent.com/thecloudranger/zap/main/skills/zap/
 make build      # ./zap
 make test       # unit + end-to-end tests
 make check      # everything CI runs
+assets/demo/record.sh   # re-record the demo GIF against a made-up HOME (needs vhs)
 ```
 
 ## License

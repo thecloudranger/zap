@@ -31,7 +31,9 @@ type cleanFlags struct {
 
 const disclaimer = `Before zap deletes anything, please read this once:
 
-  • zap removes git worktrees, and by default their branches.
+  • zap removes git worktrees, and by default their branches, only when you confirm a
+    clean here or in the picker. scan, explain, map, check and schedule never delete,
+    and zap never deletes agent temp sessions or transcripts.
   • It only acts in repositories that contain a .zap file (see: zap init).
   • It only removes worktrees that pass every safety check: clean, nothing hidden
     from git status, unlocked, not protected, not active within min_age, no other
