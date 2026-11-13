@@ -38,8 +38,8 @@ homebrew_casks:
     repository:
       owner: thecloudranger
       name: homebrew-tap
-      # The cask publisher does not have envOrDefault; .Env works (index: unset is empty).
-      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+      # GoReleaser accepts exactly {{ .Env.NAME }} here: no other template logic.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     # Without a tap token (local snapshots) the cask is written but not uploaded.
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
     homepage: https://github.com/thecloudranger/zap

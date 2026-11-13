@@ -6,6 +6,12 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2]
+
+### Fixed
+
+- The release publishes the Homebrew cask (0.2.0 and 0.2.1 shipped binaries only).
+
 ## [0.2.1]
 
 ### Fixed
