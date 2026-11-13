@@ -28,6 +28,12 @@ type session struct {
 
 func (s session) run(args ...string) (string, int) {
 	s.t.Helper()
+	return s.runWith(nil, args...)
+}
+
+// runWith is run with the dependencies adjusted first.
+func (s session) runWith(adjust func(*Deps), args ...string) (string, int) {
+	s.t.Helper()
 	var out bytes.Buffer
 	d := Deps{
 		Git:       gitx.Exec{},
@@ -40,6 +46,10 @@ func (s session) run(args ...string) (string, int) {
 		Home:      s.home,
 		ConfigDir: filepath.Join(s.home, "config"),
 		StateDir:  filepath.Join(s.home, "state"),
+		TmpRoot:   s.t.TempDir(), // no agent leftovers unless a test adds them
+	}
+	if adjust != nil {
+		adjust(&d)
 	}
 	root := NewRoot(d)
 	root.SetArgs(args)
@@ -84,7 +94,7 @@ func TestCleanDisclaimerAndConfirm(t *testing.T) {
 	assert.NotContains(t, out, "Type \"zap\"", "disclaimer is asked only once")
 	assert.Contains(t, out, "✓ zapped")
 	assert.Contains(t, out, "Zapped 1 worktree.")
-	assert.Regexp(t, `Freed about \S+ \S+  ·  free space`, out)
+	assert.Regexp(t, `Freed about \S+ \S+  ·  \S+ \S+ free of \S+ \S+`, out)
 	assert.NoDirExists(t, wt)
 
 	out, code = session{t, home, repo, ""}.run("history")

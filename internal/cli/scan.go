@@ -13,18 +13,23 @@ import (
 	"github.com/thecloudranger/zap/internal/discover"
 	"github.com/thecloudranger/zap/internal/gitx"
 	"github.com/thecloudranger/zap/internal/inspect"
+	"github.com/thecloudranger/zap/internal/leftovers"
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/sizer"
 )
 
 // ScanResult is the `data` payload of `zap scan --json`.
 type ScanResult struct {
-	All      bool               `json:"all"` // machine-wide scan of the scan roots
-	Roots    []string           `json:"roots,omitempty"`
-	Repos    []model.RepoReport `json:"repos"`
-	Scanned  int                `json:"scanned"` // repositories inspected
-	Warnings []string           `json:"-"`
-	Elapsed  time.Duration      `json:"-"`
+	All     bool               `json:"all"` // machine-wide scan of the scan roots
+	Roots   []string           `json:"roots,omitempty"`
+	Repos   []model.RepoReport `json:"repos"`
+	Scanned int                `json:"scanned"` // repositories inspected
+	Free    uint64             `json:"freeBytes,omitempty"`
+	Total   uint64             `json:"totalBytes,omitempty"` // of the disk holding the home folder
+	// Leftovers is what agents keep outside worktrees (temp sessions, transcripts); --all only.
+	Leftovers int64         `json:"leftoverBytes,omitempty"`
+	Warnings  []string      `json:"-"`
+	Elapsed   time.Duration `json:"-"`
 }
 
 type scanFlags struct {
@@ -99,7 +104,13 @@ func scan(cmd *cobra.Command, d Deps, args []string, fl scanFlags) (ScanResult, 
 		}
 		// Not inside a repository and no PATH: fall through to a machine-wide scan.
 	}
-	return scanAll(cmd, d, opt, fl.asJSON)
+	res, err := scanAll(cmd, d, opt, fl.asJSON)
+	if err == nil && !fl.noSize {
+		if gs, err := leftovers.Find(cmd.Context(), leftovers.Options{Home: d.Home, TmpRoot: d.TmpRoot}); err == nil {
+			res.Leftovers = leftovers.Total(gs)
+		}
+	}
+	return res, err
 }
 
 // scanAll discovers every repository under the scan roots and inspects them concurrently.
@@ -147,6 +158,9 @@ func scanAll(cmd *cobra.Command, d Deps, opt inspect.Options, quiet bool) (ScanR
 		}
 	}
 	res.Elapsed = time.Since(start)
+	if free, total, err := sizer.Disk(d.Home); err == nil {
+		res.Free, res.Total = free, total
+	}
 	return res, nil
 }
 

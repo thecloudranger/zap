@@ -61,6 +61,12 @@ func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 			_, _ = fmt.Fprintf(w, "Linked worktrees use about %s; %s of that is in merged or empty ones.\n",
 				sizer.Human(total), sizer.Human(done))
 		}
+		if res.Leftovers > 0 {
+			_, _ = fmt.Fprintf(w, "Agent temp files and transcripts use %s more; see zap map.\n", sizer.Human(res.Leftovers))
+		}
+		if res.Total > 0 {
+			_, _ = fmt.Fprintf(w, "The disk has %s free of %s.\n", sizer.Human(int64(res.Free)), sizer.Human(int64(res.Total)))
+		}
 	}
 	return nil
 }

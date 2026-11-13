@@ -47,6 +47,9 @@ zap clean --all          # …in every opted-in repo at once
 zap history              # What zap removed, with backup refs
 zap undo                 # Bring back what the last clean removed
 zap roots                # Show or change where --all looks (zap roots add|remove|reset)
+zap check                # One line on merged or empty worktrees and free disk space
+zap schedule on          # Run `zap check --notify` every day; it never deletes
+zap map                  # Draw what coding agents keep on this disk
 zap version              # Show version
 ```
 
@@ -92,6 +95,51 @@ SIZE is what removing a worktree would free, measured like `du`; DEPS is the par
 dependency and build folders such as `node_modules`, `.venv` and `target`. Hard-linked files
 (a pnpm store, for example) are not counted, because removing one link frees nothing;
 `zap explain` reports them as shared.
+
+## Before the disk fills
+
+A cleanup script that fails quietly is how a 2 TB disk ends up full. `zap check` scans every
+repository under your scan roots and prints one line; it exits `3` when merged or empty worktrees
+use at least `--min-stale` (default 1 GB) or free space drops under `--min-free` (default 10 GB),
+so it fits cron, CI or a shell prompt. It never deletes anything.
+
+```text
+$ zap check
+4 merged or empty worktrees use 1.4 GB. The disk has 14 GB free of 494 GB.
+Agent temp files and transcripts use 23 MB more; see zap map.
+Run zap to review them; its safety checks decide what goes.
+```
+
+`zap schedule on` runs `zap check --notify` every day (`--every 6h` for more often) and shows a
+desktop notification when a limit is passed: a launchd agent on macOS, a systemd user timer on
+Linux. On Termux it prints a cron line to add yourself. `zap schedule off` removes it.
+
+Agents keep more than worktrees. `zap map` draws all of it to scale: worktrees per agent, Claude
+Code's temp sessions in `/tmp/claude-<uid>`, and the transcripts Claude Code and Codex need to
+resume a session. It only reports temp sessions and transcripts; it does not delete them.
+
+```text
+$ zap map
+Coding agents keep 1.6 GB on this disk. It has 14 GB free of 494 GB.
+
+  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█████████▓░
+  ▒ merged or empty worktrees 1.4 GB   █ worktrees in use 218 MB   ▓ temp sessions 19 MB   ░ transcripts 3.8 MB
+
+  Worktrees                    1.6 GB  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒████  1.4 GB merged or empty
+    Claude Code                940 MB  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒               2 worktrees, 940 MB merged or empty
+    Codex                      268 MB  ▒▒▒▒▒                           1 worktree, 268 MB merged or empty
+    other                      218 MB  ████                            1 worktree
+    Cursor                     185 MB  ▒▒▒                             1 worktree, 185 MB merged or empty
+
+  Claude Code temp sessions     19 MB  ▓                               6 sessions in /tmp/claude-501
+    ~/dev/my-app                11 MB  ▓                               3 sessions
+    ~/dev/api                  8.2 MB  ▓                               3 sessions
+
+  Claude Code transcripts      3.0 MB  ░                               1 session, needed to resume them
+    ~/dev/my-app               3.0 MB  ░                               1 session
+
+  Codex transcripts            803 KB  ░                               1 session, needed to resume them
+```
 
 ## Cleaning safely
 

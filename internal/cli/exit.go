@@ -14,6 +14,7 @@ const (
 	ExitOK          = 0
 	ExitFailure     = 1
 	ExitUsage       = 2
+	ExitAttention   = 3 // zap check: stale worktrees or free space passed a limit
 	ExitRefused     = 4 // zap refused to act (disclaimer not accepted, confirmation missing)
 	ExitInterrupted = 130
 )

@@ -154,8 +154,8 @@ func applyAndReport(cmd *cobra.Command, d Deps, plans []plan.Plan, warnings []st
 		}
 	} else {
 		renderResults(out, results, d.Home)
-		freeAfter, err := sizer.Free(plans[0].Repo)
-		renderFreed(out, results, freeBefore, freeAfter, freeErr == nil && err == nil && !fl.all)
+		freeAfter, total, err := sizer.Disk(plans[0].Repo)
+		renderFreed(out, results, freeBefore, freeAfter, total, freeErr == nil && err == nil && !fl.all)
 	}
 	for _, r := range results {
 		if r.Outcome == plan.Failed {
@@ -235,7 +235,7 @@ func reclaimable(plans []plan.Plan) int64 {
 
 // renderFreed reports space freed: the measured size of what was removed and, when all
 // of it was on one disk, the change in that disk's free space.
-func renderFreed(w io.Writer, results []plan.Result, before, after uint64, oneDisk bool) {
+func renderFreed(w io.Writer, results []plan.Result, before, after, total uint64, oneDisk bool) {
 	var freed int64
 	for _, r := range results {
 		freed += r.Freed
@@ -245,7 +245,7 @@ func renderFreed(w io.Writer, results []plan.Result, before, after uint64, oneDi
 	}
 	line := fmt.Sprintf("Freed about %s", sizer.Human(freed))
 	if oneDisk {
-		line += "  ·  free space " + sizer.Human(int64(after))
+		line += "  ·  " + sizer.Human(int64(after)) + " free of " + sizer.Human(int64(total))
 		if after > before { // other processes write too, so the change can be noise
 			line += " (+" + sizer.Human(int64(after-before)) + ")"
 		}

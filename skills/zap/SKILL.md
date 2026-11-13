@@ -16,6 +16,8 @@ zap scan --all --json           # every repository under the user's scan roots
 zap explain --json <path>       # every check and safety gate behind one worktree's status
 zap clean --dry-run --json      # what clean would remove, and what it keeps and why
 zap clean --all --dry-run --json
+zap check --json                # merged or empty worktrees and free disk space (exit 3 past a limit)
+zap map --json                  # agent disk use: worktrees per agent, temp sessions, transcripts
 ```
 
 Add `--fetch` to see pull requests merged on the remote; add `--gh` to ask GitHub too.
@@ -42,6 +44,9 @@ Rules:
 - Never pass `--unlock-stale` unless the user asks: it releases locks other tools set.
 - Never delete worktrees with `rm -rf` or `git worktree remove --force` instead of zap.
 - Idle worktrees are never removed by `zap clean`; only the user can pick them in `zap`.
+- `zap schedule on` installs a launchd agent or systemd timer on the user's machine: run it only
+  when the user asks. zap reports agent temp sessions and transcripts but never deletes them;
+  do not delete them yourself either (transcripts are how sessions are resumed).
 
 ## Undo
 
@@ -61,5 +66,6 @@ restored.
 | 0 | ok |
 | 1 | error (see `error.code`) |
 | 2 | bad usage |
+| 3 | `zap check`: a limit was passed (merged or empty worktrees, or free space) |
 | 4 | refused: confirmation or disclaimer missing; nothing was changed |
 | 130 | interrupted |
