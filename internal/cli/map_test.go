@@ -50,3 +50,38 @@ func TestRenderMap(t *testing.T) {
 	renderMap(&empty, MapResult{}, palette{}, "/home/me", 3)
 	assert.Contains(t, empty.String(), "No agent worktrees")
 }
+
+func TestRenderTree(t *testing.T) {
+	r := MapResult{
+		Free: 13e9, Total: 494e9,
+		Worktrees: []MapAgent{
+			{Agent: "claude", Bytes: 940e6, Stale: 940e6, Items: []MapWorktree{{Label: "auth", Bytes: 537e6, Stale: true}, {Label: "fix-login", Bytes: 403e6, Stale: true}}},
+			{Agent: "", Bytes: 218e6, Items: []MapWorktree{{Label: "search", Bytes: 218e6}}},
+		},
+		Leftovers: []leftovers.Group{
+			{Agent: "claude", Kind: leftovers.Temp, Bytes: 600e6, Items: []leftovers.Item{{Label: "~/dev/my-app", Bytes: 400e6}, {Label: "~/dev/api", Bytes: 200e6}}},
+			{Agent: "codex", Kind: leftovers.Transcripts, Bytes: 90e6},
+		},
+	}
+	var b bytes.Buffer
+	renderTree(&b, r, palette{}, 100, 20)
+	out := b.String()
+	assert.Contains(t, out, "Coding agents keep 1.8 GB on this disk. It has 13 GB free of 494 GB.")
+	for _, s := range []string{"Claude Code worktrees", "auth", "537 MB", "fix-login", "search", "~/dev/my-app", "Codex"} {
+		assert.Contains(t, out, s)
+	}
+	assert.Contains(t, out, "▒▒ merged or empty worktrees 940 MB")
+	assert.NotContains(t, out, "\x1b[")
+	assert.NotContains(t, out, "… MB", "sizes are never cut")
+
+	lines := strings.Split(out, "\n")
+	grid := lines[2 : 2+20]
+	for _, l := range grid {
+		assert.LessOrEqual(t, len([]rune(l)), 2+96, "the drawing stays inside the terminal: %q", l)
+	}
+	assert.Contains(t, grid[1], "▒", "merged worktrees are hatched")
+	assert.Contains(t, out, "█", "worktrees in use are solid")
+
+	assert.Equal(t, "fix-lo…", fit("fix-login", 7, true))
+	assert.Equal(t, "…/my-app", fit("~/dev/my-app", 8, false))
+}

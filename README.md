@@ -49,7 +49,7 @@ zap undo                 # Bring back what the last clean removed
 zap roots                # Show or change where --all looks (zap roots add|remove|reset)
 zap check                # One line on merged or empty worktrees and free disk space
 zap schedule on          # Run `zap check --notify` every day; it never deletes
-zap map                  # Draw what coding agents keep on this disk
+zap map                  # Draw what coding agents keep on this disk (--list for text)
 zap version              # Show version
 ```
 
@@ -116,10 +116,12 @@ Linux. On Termux it prints a cron line to add yourself. `zap schedule off` remov
 
 Agents keep more than worktrees. `zap map` draws all of it to scale: worktrees per agent, Claude
 Code's temp sessions in `/tmp/claude-<uid>`, and the transcripts Claude Code and Codex need to
-resume a session. It only reports temp sessions and transcripts; it does not delete them.
+resume a session. On a wide terminal it draws nested blocks sized by disk use, like a disk
+treemap, with merged and empty worktrees hatched; piped or with `--list` it prints the same as a
+list. It only reports temp sessions and transcripts; it does not delete them.
 
 ```text
-$ zap map
+$ zap map --list
 Coding agents keep 1.6 GB on this disk. It has 14 GB free of 494 GB.
 
   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█████████▓░

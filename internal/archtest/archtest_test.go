@@ -34,6 +34,7 @@ var allowed = map[string][]string{
 	"internal/leftovers": {},
 	"internal/notify":    {},
 	"internal/schedule":  {},
+	"internal/treemap":   {},
 	"internal/oplog":     {},
 	"internal/restore":   {"internal/model", "internal/gitx", "internal/oplog"},
 	"internal/plan": {"internal/model", "internal/gitx", "internal/inspect", "internal/verdict",

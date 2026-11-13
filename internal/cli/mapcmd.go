@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -28,10 +30,19 @@ type MapResult struct {
 // MapAgent is one agent's linked worktrees: all of them, and the stale (merged or
 // empty) part that `zap clean` can remove in opted-in repositories.
 type MapAgent struct {
-	Agent string `json:"agent"`
+	Agent string        `json:"agent"`
+	Bytes int64         `json:"bytes"`
+	Stale int64         `json:"staleBytes"`
+	Count int           `json:"count"`
+	Items []MapWorktree `json:"items"`
+}
+
+// MapWorktree is one linked worktree on the map.
+type MapWorktree struct {
+	Label string `json:"label"` // short name: the folder, with its parent when that says more
+	Path  string `json:"path"`
 	Bytes int64  `json:"bytes"`
-	Stale int64  `json:"staleBytes"`
-	Count int    `json:"count"`
+	Stale bool   `json:"stale"` // merged or empty
 }
 
 // The fills say what a block is; colour only repeats it, so the picture reads without colour.
@@ -47,13 +58,15 @@ var agentNames = map[string]string{
 }
 
 func newMapCmd(d Deps) *cobra.Command {
-	var asJSON bool
-	var top int
+	var asJSON, tree, list bool
+	var top, height int
 	cmd := &cobra.Command{
 		Use:   "map",
 		Short: "Draw what coding agents keep on this disk: worktrees, temp sessions, transcripts",
 		Long: "Scan every repository under the scan roots and the folders where agents keep their\n" +
 			"temp sessions and transcripts, then draw it to scale. Nothing is deleted.\n\n" +
+			"On a terminal at least 90 columns wide it draws nested blocks sized by disk use, like\n" +
+			"a disk treemap; piped or narrow, it lists agents and projects with bars.\n\n" +
 			"  ▒ merged or empty worktrees, which zap reviews for removal\n" +
 			"  █ worktrees in use\n" +
 			"  ▓ agent temp sessions\n" +
@@ -71,12 +84,23 @@ func newMapCmd(d Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if tree && list {
+				return usageErr(errors.New("--tree and --list cannot be used together"))
+			}
+			// The picture on a wide terminal; the list when piped or narrow, where it reads better.
+			if tree || (!list && isTerminal(out) && termCols(out) >= 90) {
+				renderTree(out, res, mapStyle(d, out), termCols(out), height)
+				return nil
+			}
 			renderMap(out, res, mapStyle(d, out), d.Home, top)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "output a JSON envelope on stdout")
 	cmd.Flags().IntVar(&top, "top", 3, "projects to list under each kind of agent data")
+	cmd.Flags().BoolVar(&tree, "tree", false, "draw nested blocks sized by disk use (the default on a wide terminal)")
+	cmd.Flags().BoolVar(&list, "list", false, "list agents and projects with bars (the default when piped)")
+	cmd.Flags().IntVar(&height, "height", 22, "rows the --tree drawing uses")
 	return cmd
 }
 
@@ -99,9 +123,11 @@ func buildMap(cmd *cobra.Command, d Deps, quiet bool) (MapResult, error) {
 			}
 			m.Count++
 			m.Bytes += a.Facts.Size.Total
-			if a.Verdict.Status == model.StatusMerged || a.Verdict.Status == model.StatusEmpty {
+			stale := a.Verdict.Status == model.StatusMerged || a.Verdict.Status == model.StatusEmpty
+			if stale {
 				m.Stale += a.Facts.Size.Total
 			}
+			m.Items = append(m.Items, MapWorktree{Label: shortName(a.Path, rep.Root), Path: a.Path, Bytes: a.Facts.Size.Total, Stale: stale})
 		}
 	}
 	for _, m := range by {
@@ -237,12 +263,7 @@ func renderMap(w io.Writer, r MapResult, p palette, home string, top int) {
 		_, _ = fmt.Fprintln(w, "No agent worktrees, temp sessions or transcripts found.")
 		return
 	}
-	cols := 100
-	if f, ok := w.(*os.File); ok {
-		if c, _, err := term.GetSize(int(f.Fd())); err == nil && c > 40 {
-			cols = c
-		}
-	}
+	cols := termCols(w)
 
 	// The headline: all agent data as one bar, and the disk it sits on.
 	head := "Coding agents keep " + sizer.Human(all) + " on this disk"
@@ -296,6 +317,31 @@ func renderMap(w io.Writer, r MapResult, p palette, home string, top int) {
 	if temp+logs > 0 {
 		_, _ = fmt.Fprintln(w, "zap only reports temp sessions and transcripts; it does not delete them.")
 	}
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
+
+// termCols is the terminal's width, or 100 when w is not a terminal.
+func termCols(w io.Writer) int {
+	if f, ok := w.(*os.File); ok {
+		if c, _, err := term.GetSize(int(f.Fd())); err == nil && c > 40 {
+			return c
+		}
+	}
+	return 100
+}
+
+// shortName is a worktree's folder name, with its parent when the folder is only the
+// repository's name again (~/.codex/worktrees/a1f3/my-app is "a1f3/my-app").
+func shortName(path, repoRoot string) string {
+	base := filepath.Base(path)
+	if base == filepath.Base(repoRoot) {
+		return filepath.Base(filepath.Dir(path)) + "/" + base
+	}
+	return base
 }
 
 // shorten keeps the start and end of s within n characters.
