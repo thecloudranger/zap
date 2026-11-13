@@ -86,3 +86,18 @@ func TestRenderTree(t *testing.T) {
 	assert.Equal(t, "fix-lo…", fit("fix-login", 7, true))
 	assert.Equal(t, "…/my-app", fit("~/dev/my-app", 8, false))
 }
+
+func TestFitPath(t *testing.T) {
+	long := "~/code/llm-eval-harness-with-structured-output-graders"
+	for in, want := range map[string]string{
+		"~/dev/my-app":                "~/dev/my-app",
+		"~/dev/clients/northwind/web": "~/dev/clients/northwind/web",
+		"~/dev/clients/northwind/platform/services/payments-reconciliation-service": "…/payments-reconciliation-service",
+		"~/dev/clients/northwind-traders/platform/billing/ui":                       "…/platform/billing/ui",
+		long: "…" + long[len(long)-33:],
+	} {
+		got := fitPath(in, 34)
+		assert.Equal(t, want, got, in)
+		assert.LessOrEqual(t, len([]rune(got)), 34, in)
+	}
+}

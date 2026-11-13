@@ -299,10 +299,8 @@ func renderMap(w io.Writer, r MapResult, p palette, home string, top int) {
 		if x.heading && i > 0 {
 			_, _ = fmt.Fprintln(w)
 		}
-		label := strings.Repeat("  ", x.indent) + x.label
-		if n := len([]rune(label)); n > labelW {
-			label = "…" + string([]rune(label)[n-labelW+1:])
-		}
+		indent := strings.Repeat("  ", x.indent)
+		label := indent + fitPath(x.label, labelW-len(indent))
 		label += strings.Repeat(" ", labelW-len([]rune(label)))
 		if x.heading {
 			label = p.strong(label)
@@ -336,6 +334,32 @@ func shortName(path, repoRoot string) string {
 		return filepath.Base(filepath.Dir(path)) + "/" + base
 	}
 	return base
+}
+
+// fitPath fits a path into n characters by keeping whole trailing folders after "…/"
+// (~/dev/clients/acme/payments-service becomes …/payments-service); a last folder
+// that is itself too long keeps its end.
+func fitPath(p string, n int) string {
+	if len([]rune(p)) <= n {
+		return p
+	}
+	parts := strings.Split(p, "/")
+	tail := parts[len(parts)-1]
+	for i := len(parts) - 2; i >= 0; i-- {
+		next := parts[i] + "/" + tail
+		if len([]rune(next))+2 > n {
+			break
+		}
+		tail = next
+	}
+	if len([]rune(tail))+2 <= n && len(parts) > 1 {
+		return "…/" + tail
+	}
+	r := []rune(tail)
+	if len(r) <= n {
+		return tail
+	}
+	return "…" + string(r[len(r)-n+1:])
 }
 
 // shorten keeps the start and end of s within n characters.
