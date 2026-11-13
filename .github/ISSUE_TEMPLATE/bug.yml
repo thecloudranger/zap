@@ -1,0 +1,26 @@
+name: Bug report
+description: zap did something wrong, or deleted or kept the wrong worktree.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what zap did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: |
+        Paste what zap printed. If zap kept or removed a worktree it shouldn't have, `zap explain --json <path>` shows each check behind its decision.
+        Edit out any paths or branch names you'd rather keep private.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: zap version and OS
+      placeholder: zap 0.2.2, macOS 15 on arm64
+    validations:
+      required: true
