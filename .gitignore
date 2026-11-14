@@ -5,3 +5,4 @@ docs/
 /assets/demo/*.gif
 !/assets/demo/zap.gif
 .DS_Store
+/assets/demo/wiki/
