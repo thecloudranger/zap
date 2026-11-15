@@ -17,8 +17,13 @@ All notable changes to zap are documented here. The format follows
 
 ### Changed
 
-- `zap scan --all` and `zap check` measure agent temp sessions and transcripts while they scan
-  repositories instead of afterwards: about a third faster on a machine with 250 repositories.
+- `zap scan --all` is about twice as fast: 10.1 s down to 5.1 s on a Mac with 248 repositories
+  (mean of 6 runs; 8.8 s to 5.0 s comparing the fastest runs). Two changes:
+  - `zap scan --all` and `zap check` measure agent temp sessions and transcripts while they
+    scan repositories instead of afterwards.
+  - On macOS, zap runs the real git binary instead of going through the `/usr/bin/git`
+    launcher, which spent about 9 ms on every git call. A Homebrew or other git earlier on
+    your PATH is still the one zap uses.
 
 ### Fixed
 

@@ -47,7 +47,7 @@ func ExitCode(err error) int {
 
 // Exec runs the real git binary.
 type Exec struct {
-	Bin string // defaults to "git"
+	Bin string // defaults to git from PATH (on macOS, the real binary behind /usr/bin/git)
 }
 
 // stderrTail bounds how much stderr is kept in error messages.
@@ -57,7 +57,7 @@ const stderrTail = 2000
 func (e Exec) Run(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	bin := e.Bin
 	if bin == "" {
-		bin = "git"
+		bin = defaultBin()
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
