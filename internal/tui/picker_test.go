@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -20,7 +21,7 @@ func item(path string, action plan.Action, size int64) plan.Item {
 	it := plan.Item{Path: path, Branch: strings.TrimPrefix(path, "/r/"), Status: model.StatusMerged, Action: action,
 		Size: &model.Usage{Total: size}, DeleteBranch: true}
 	if action == plan.Keep {
-		it.Refusal = "locked: claude agent running"
+		it.Refusal, it.KeptBy = "locked: claude agent running", "unlocked"
 	}
 	return it
 }
@@ -33,7 +34,7 @@ func fixture() []plan.Plan {
 			item("/home/u/dev/a/w3", plan.Remove, 500_000_000),
 		}},
 		{Repo: "/home/u/dev/b", OptedIn: false, Target: model.Target{Name: "main"}, Items: []plan.Item{
-			{Path: "/home/u/dev/b/w", Status: model.StatusEmpty, Action: plan.Keep, Eligible: true, Refusal: "no .zap"},
+			{Path: "/home/u/dev/b/w", Status: model.StatusEmpty, Action: plan.Keep, Eligible: true, Refusal: "no .zap", KeptBy: plan.KeptNotOptedIn},
 		}},
 	}
 }
@@ -116,6 +117,7 @@ func TestReviewConfirmAndBack(t *testing.T) {
 	press(t, p, "enter")
 	v := view(p)
 	assert.Contains(t, v, "Zap 2 worktrees (about 1.5 GB)?")
+	assert.Contains(t, v, "Why the other 2 stay: 1 is locked, 1 is in a repo without a .zap file.")
 	assert.Contains(t, v, "deleted for good")
 	press(t, p, "n")
 	assert.Equal(t, listMode, p.mode)
@@ -150,10 +152,19 @@ func TestDetail(t *testing.T) {
 	press(t, p, "e")
 	v := view(p)
 	assert.Contains(t, v, "~/dev/a/w1")
+	assert.NotContains(t, v, "commit   last on", "no commit date known")
 	assert.Contains(t, v, "no uncommitted changes")
 	assert.Contains(t, v, "remove worktree, delete branch")
 	press(t, p, "esc")
 	assert.Equal(t, listMode, p.mode)
+}
+
+func TestDetailShowsLastCommit(t *testing.T) {
+	pl := fixture()
+	pl[0].Items[0].LastCommit = time.Date(2026, 11, 12, 9, 30, 0, 0, time.Local)
+	p := New(pl, "/home/u", nil)
+	press(t, p, "e")
+	assert.Contains(t, view(p), "commit   last on 12 Nov 2026 09:30")
 }
 
 func TestOptIn(t *testing.T) {

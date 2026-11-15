@@ -49,6 +49,9 @@ type Options struct {
 	Home    string
 	TmpRoot string // where Claude Code puts claude-<uid>; default /tmp
 	UID     int    // default os.Getuid()
+	// NoLabels skips turning project folder names back into paths, which probes the disk;
+	// callers that only need totals (scan, check) set it.
+	NoLabels bool
 }
 
 // Find returns the groups that exist, largest first. A location that is missing or
@@ -97,7 +100,9 @@ func Find(ctx context.Context, opt Options) ([]Group, error) {
 				if err != nil {
 					return nil, err
 				}
-				it.Label = projectLabel(e.Name(), opt.Home)
+				if !opt.NoLabels {
+					it.Label = projectLabel(e.Name(), opt.Home)
+				}
 				g.add(it)
 			}
 		} else {

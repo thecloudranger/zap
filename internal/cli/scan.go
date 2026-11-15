@@ -104,11 +104,13 @@ func scan(cmd *cobra.Command, d Deps, args []string, fl scanFlags) (ScanResult, 
 		}
 		// Not inside a repository and no PATH: fall through to a machine-wide scan.
 	}
+	wait := func() int64 { return 0 }
+	if !fl.noSize {
+		wait = leftoversTotal(cmd, d)
+	}
 	res, err := scanAll(cmd, d, opt, fl.asJSON)
-	if err == nil && !fl.noSize {
-		if gs, err := leftovers.Find(cmd.Context(), leftovers.Options{Home: d.Home, TmpRoot: d.TmpRoot}); err == nil {
-			res.Leftovers = leftovers.Total(gs)
-		}
+	if left := wait(); err == nil {
+		res.Leftovers = left
 	}
 	return res, err
 }
@@ -238,4 +240,23 @@ func ghRunner(on bool) gitx.Runner {
 		return nil
 	}
 	return gitx.Exec{Bin: "gh"}
+}
+
+// leftoversTotal starts measuring agent temp sessions and transcripts in the background and
+// returns a function that waits for the total. The walk can cover hundreds of thousands of
+// files, so callers run it alongside the repository scan instead of after it.
+func leftoversTotal(cmd *cobra.Command, d Deps) func() int64 {
+	var total int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		opt := leftovers.Options{Home: d.Home, TmpRoot: d.TmpRoot, NoLabels: true}
+		if gs, err := leftovers.Find(cmd.Context(), opt); err == nil {
+			total = leftovers.Total(gs)
+		}
+	}()
+	return func() int64 {
+		<-done
+		return total
+	}
 }

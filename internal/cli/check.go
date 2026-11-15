@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/thecloudranger/zap/internal/inspect"
-	"github.com/thecloudranger/zap/internal/leftovers"
 	"github.com/thecloudranger/zap/internal/model"
 	"github.com/thecloudranger/zap/internal/sizer"
 )
@@ -85,7 +84,9 @@ func newCheckCmd(d Deps) *cobra.Command {
 
 func check(cmd *cobra.Command, d Deps, minStale, minFree int64, quiet bool) (CheckResult, error) {
 	res := CheckResult{MinStale: minStale, MinFree: minFree}
+	wait := leftoversTotal(cmd, d)
 	scanned, err := scanAll(cmd, d, inspect.Options{Sizer: sizer.NewCounter()}, quiet)
+	res.Leftovers = wait()
 	if err != nil {
 		return res, err
 	}
@@ -101,9 +102,6 @@ func check(cmd *cobra.Command, d Deps, minStale, minFree int64, quiet bool) (Che
 		}
 	}
 	res.Free, res.Total = scanned.Free, scanned.Total
-	if gs, err := leftovers.Find(cmd.Context(), leftovers.Options{Home: d.Home, TmpRoot: d.TmpRoot}); err == nil {
-		res.Leftovers = leftovers.Total(gs)
-	}
 	if res.overStale() {
 		res.Reasons = append(res.Reasons, fmt.Sprintf("merged or empty worktrees use %s", sizer.Human(res.Stale)))
 	}

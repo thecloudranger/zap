@@ -64,16 +64,16 @@ Add `--json` to `scan`, `explain`, `clean`, `check` or `map` for scripts and age
 $ zap scan --all
 ~/dev/api  ·  1 linked worktree  ·  target main
 
-  WORKTREE                     BRANCH   AGENT  STATUS  SIZE    DEPS    AGE  ACTIVE  NOTES
-  ~/.codex/worktrees/a1f3/api  a85e7da  codex  empty   412 MB  398 MB  6h   6h      detached
+  WORKTREE                     BRANCH   AGENT  STATUS  SIZE    DEPS    COMMIT  AGE  ACTIVE  NOTES
+  ~/.codex/worktrees/a1f3/api  a85e7da  codex  empty   412 MB  398 MB  1d      6h   6h      detached
 
 1 empty  ·  412 MB, 412 MB merged or empty
 
 ~/dev/my-app  ·  2 linked worktrees  ·  target main
 
-  WORKTREE                BRANCH         AGENT   STATUS  SIZE    DEPS    AGE  ACTIVE  NOTES
-  .claude/worktrees/auth  worktree-auth  claude  merged  1.1 GB  1.0 GB  3d   2d      -
-  .worktrees/login        fix/login      -       active  640 MB  590 MB  5d   2h      dirty(1)
+  WORKTREE                BRANCH         AGENT   STATUS  SIZE    DEPS    COMMIT  AGE  ACTIVE  NOTES
+  .claude/worktrees/auth  worktree-auth  claude  merged  1.1 GB  1.0 GB  2d      3d   2d      -
+  .worktrees/login        fix/login      -       active  640 MB  590 MB  3h      5d   2h      dirty(1)
 
 1 merged · 1 active  ·  1.7 GB, 1.1 GB merged or empty
 
@@ -130,11 +130,13 @@ zap removes a worktree only when it passes every check:
   (`assume-unchanged`, or `skip-worktree` outside a sparse checkout)
 - no ignored files matching `keep_ignored`, such as `.env` or keys, which are not in git
 - no activity within `min_age`
-- no other process (a shell, editor or agent) working inside it, and not the directory you
-  run zap from
+- no other process working inside it, such as a shell, a terminal editor or an agent started
+  there, and not the directory you run zap from. zap can't yet tell when a GUI editor like
+  VS Code has the folder open, so close it before you clean
 
 If a check can't run, zap keeps the worktree, and it checks each one again right before removing
-it. zap deletes a branch only when the target already holds its work, or it has no commits. A
+it. `zap clean` and the picker end with a line that counts why the rest stay, for example
+"Why the other 5 stay: 3 have unmerged work, 2 have uncommitted changes." zap deletes a branch only when the target already holds its work, or it has no commits. A
 `gone` or `missing` worktree with unmerged commits keeps its branch. `zap clean` leaves idle
 worktrees alone; the picker shows them unselected, and removing one keeps its branch.
 
@@ -215,9 +217,11 @@ Coding agents keep 1.6 GB on this disk. It has 14 GB free of 494 GB.
   `node_modules`, `.venv` and `target`.
 - **Hard-linked files** (a pnpm store, for example) are not counted, because removing one link
   frees nothing; `zap explain` reports them as shared.
+- **COMMIT** is when the worktree's branch last got a commit, **AGE** is when the worktree was
+  created, and **ACTIVE** is the latest of those two and its newest file change.
 - **Free space** is what `df` reports for the disk holding your home folder.
-- **"Merged or empty"** describes the work in a worktree. A safety check (an ignored `.env`, an
-  open editor) can still keep the worktree when you clean.
+- **"Merged or empty"** describes the work in a worktree. A safety check (an ignored `.env`, a
+  shell open inside it) can still keep the worktree when you clean.
 
 ## With a coding agent
 

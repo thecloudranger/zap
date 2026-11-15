@@ -36,15 +36,15 @@ func renderScan(w io.Writer, res ScanResult, home string, now time.Time) error {
 			continue
 		}
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(tw, "  WORKTREE\tBRANCH\tAGENT\tSTATUS\tSIZE\tDEPS\tAGE\tACTIVE\tNOTES")
+		_, _ = fmt.Fprintln(tw, "  WORKTREE\tBRANCH\tAGENT\tSTATUS\tSIZE\tDEPS\tCOMMIT\tAGE\tACTIVE\tNOTES")
 		for _, a := range linked {
 			size, deps := "-", "-"
 			if u := a.Facts.Size; u != nil {
 				size, deps = sizer.Human(u.Total), sizer.Human(u.Deps)
 			}
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				relTo(a.Path, rep.Root, home), branchLabel(a.Worktree), dash(a.Agent), a.Verdict.Status,
-				size, deps, ago(now, a.Facts.Created), ago(now, a.Facts.LastActivity), notes(a))
+				size, deps, ago(now, a.Facts.LastCommit), ago(now, a.Facts.Created), ago(now, a.Facts.LastActivity), notes(a))
 		}
 		if err := tw.Flush(); err != nil {
 			return err

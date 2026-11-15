@@ -75,7 +75,7 @@ func TestScanTable(t *testing.T) {
 	r := run(t, repo, "scan")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "2 linked worktrees")
-	assert.Regexp(t, `WORKTREE\s+BRANCH\s+AGENT\s+STATUS\s+SIZE\s+DEPS\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
+	assert.Regexp(t, `WORKTREE\s+BRANCH\s+AGENT\s+STATUS\s+SIZE\s+DEPS\s+COMMIT\s+AGE\s+ACTIVE\s+NOTES`, r.stdout)
 	assert.Regexp(t, `\d+(\.\d)? KB`, r.stdout, "worktrees are measured")
 	assert.Regexp(t, `\.claude/worktrees/feat-a\s+worktree-feat-a\s+claude\s`, r.stdout)
 	assert.Contains(t, r.stdout, ".claude/worktrees/feat-a")
@@ -158,7 +158,7 @@ func TestScanStatuses(t *testing.T) {
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, "target main")
 	assert.Regexp(t, `\.claude/worktrees/done\s+worktree-done\s+claude\s+merged`, r.stdout)
-	assert.Regexp(t, `\.worktrees/wip\s+wip\s+-\s+active\s+(\S+ \S+\s+){2}\S+\s+\S+\s+dirty\(1\)`, r.stdout)
+	assert.Regexp(t, `\.worktrees/wip\s+wip\s+-\s+active\s+(\S+ \S+\s+){2}(\S+\s+){3}dirty\(1\)`, r.stdout)
 	assert.Regexp(t, `1 merged · 1 active  ·  \S+ \S+, \S+ \S+ merged or empty`, r.stdout)
 
 	r = run(t, repo, "scan", "--no-size")

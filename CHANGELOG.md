@@ -6,6 +6,26 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `zap scan` has a COMMIT column: when each worktree's branch last got a commit. The picker's
+  details (`e`) show the date too.
+- `zap clean` and the picker's review screen end with one line that counts why the other
+  worktrees stay, such as "Why the other 5 stay: 3 have unmerged work, 2 have uncommitted
+  changes." `clean --json` adds `keptByReason`.
+- The first-run disclaimer says how to preview a clean: `zap clean --dry-run`.
+
+### Changed
+
+- `zap scan --all` and `zap check` measure agent temp sessions and transcripts while they scan
+  repositories instead of afterwards: about a third faster on a machine with 250 repositories.
+
+### Fixed
+
+- The README, wiki and website said zap notices an open editor. It notices processes working
+  inside a worktree (a shell, a terminal editor, an agent), not a GUI editor such as VS Code
+  that only has the folder open; close it before you clean.
+
 ## [0.2.3]
 
 ### Changed

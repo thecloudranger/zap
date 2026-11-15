@@ -387,6 +387,9 @@ func (p *Picker) detail() string {
 	fmt.Fprintf(&b, "  repo     %s\n", p.short(pl.Repo))
 	fmt.Fprintf(&b, "  branch   %s @ %s\n", dash(it.Branch), short(it.Head))
 	fmt.Fprintf(&b, "  status   %s: %s\n", it.Status, it.Reason)
+	if !it.LastCommit.IsZero() {
+		fmt.Fprintf(&b, "  commit   last on %s\n", it.LastCommit.Local().Format("2 Jan 2006 15:04"))
+	}
 	if it.Size != nil {
 		fmt.Fprintf(&b, "  size     %s freed (%s dependencies)", sizer.Human(it.Size.Total), sizer.Human(it.Size.Deps))
 		if it.Size.Shared > 0 {
@@ -430,6 +433,10 @@ func (p *Picker) review() string {
 		it := p.item(r)
 		fmt.Fprintf(&b, "  %s  %s\n", p.short(it.Path), helpStyle.Render(it.Describe()))
 		shown++
+	}
+	picked := func(pi, ii int) bool { return p.selected[Key{pi, ii}] }
+	if line := plan.KeptLine(plan.Kept(p.plans, picked)); line != "" {
+		b.WriteString("\n" + helpStyle.Render(line) + "\n")
 	}
 	b.WriteString("\nBranches are backed up under refs/zap/backup/ first; `zap undo` brings them back.\n")
 	b.WriteString(warnStyle.Render("Other ignored files (node_modules, build output, caches) are deleted for good.") + "\n\n")

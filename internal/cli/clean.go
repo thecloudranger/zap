@@ -22,6 +22,8 @@ type CleanResult struct {
 	DryRun  bool          `json:"dryRun"`
 	Plans   []plan.Plan   `json:"plans"`
 	Results []plan.Result `json:"results"`
+	// KeptByReason counts the worktrees that stay, by safety gate name or plan.Kept* reason.
+	KeptByReason []plan.KeptCount `json:"keptByReason"`
 }
 
 type cleanFlags struct {
@@ -42,6 +44,8 @@ const disclaimer = `Before zap deletes anything, please read this once:
     zap undo brings branches and worktrees back.
   • Other files git ignores inside a removed worktree (node_modules, build
     output, caches) are deleted and cannot be restored.
+  • To see what zap would delete without deleting anything, run
+    zap clean --dry-run.
 
 `
 
@@ -102,7 +106,7 @@ func runClean(cmd *cobra.Command, d Deps, args []string, fl cleanFlags) error {
 	if fl.dryRun || toZap == 0 {
 		if fl.asJSON {
 			return writeJSON(out, Envelope{Command: "clean", Status: "ok", Warnings: warnings,
-				Data: CleanResult{DryRun: true, Plans: plans, Results: []plan.Result{}}})
+				Data: CleanResult{DryRun: true, Plans: plans, Results: []plan.Result{}, KeptByReason: keptByReason(plans, fl.all)}})
 		}
 		renderPlans(out, plans, warnings, fl.all, d.Home)
 		if fl.dryRun && toZap > 0 {
@@ -151,7 +155,7 @@ func applyAndReport(cmd *cobra.Command, d Deps, plans []plan.Plan, warnings []st
 	}
 	if fl.asJSON {
 		if err := writeJSON(out, Envelope{Command: "clean", Status: "ok", Warnings: warnings,
-			Data: CleanResult{Plans: plans, Results: results}}); err != nil {
+			Data: CleanResult{Plans: plans, Results: results, KeptByReason: keptByReason(plans, fl.all)}}); err != nil {
 			return err
 		}
 	} else {
@@ -325,6 +329,9 @@ func renderPlans(w io.Writer, plans []plan.Plan, warnings []string, all bool, ho
 		for _, p := range plans {
 			renderPlan(w, p, home)
 		}
+		if line := plan.KeptLine(keptByReason(plans, all)); line != "" {
+			_, _ = fmt.Fprintln(w, line)
+		}
 		return
 	}
 	var waiting []plan.Plan
@@ -351,6 +358,28 @@ func renderPlans(w io.Writer, plans []plan.Plan, warnings []string, all bool, ho
 		return
 	}
 	_, _ = fmt.Fprintf(w, "%d to zap in %d opted-in repositor%s.\n", toZap, repos, pluralY(repos))
+	if line := plan.KeptLine(keptByReason(plans, all)); line != "" {
+		_, _ = fmt.Fprintln(w, line)
+	}
+}
+
+// keptByReason counts why worktrees stay. With --all it covers opted-in repositories only;
+// the others are listed on their own and need `zap init` first.
+func keptByReason(plans []plan.Plan, all bool) []plan.KeptCount {
+	if all {
+		var in []plan.Plan
+		for _, p := range plans {
+			if p.OptedIn {
+				in = append(in, p)
+			}
+		}
+		plans = in
+	}
+	kc := plan.Kept(plans, nil)
+	if kc == nil {
+		kc = []plan.KeptCount{}
+	}
+	return kc
 }
 
 func eligible(p plan.Plan) int {

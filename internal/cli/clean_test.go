@@ -76,6 +76,7 @@ func TestCleanDisclaimerAndConfirm(t *testing.T) {
 	assert.Equal(t, ExitRefused, code)
 	assert.Contains(t, out, `Type "zap" to accept`)
 	assert.Contains(t, out, "cannot be restored", "disclaimer warns about ignored files")
+	assert.Contains(t, out, "To see what zap would delete without deleting anything, run\n    zap clean --dry-run.")
 	assert.DirExists(t, wt)
 	cfg, err := policy.LoadConfig(filepath.Join(home, "config"))
 	require.NoError(t, err)
@@ -151,4 +152,33 @@ func TestKeepUnselected(t *testing.T) {
 	plans[0].OptedIn = false
 	got = keepUnselected(plans, sel)
 	assert.Equal(t, plan.Keep, got[0].Items[3].Action, "nothing is removed in a repository that has not opted in")
+}
+
+func TestCleanDryRunSaysWhyTheRestStay(t *testing.T) {
+	repo, _ := mergedRepo(t)
+	dirty := testkit.AddWorktree(t, repo, ".worktrees/dirty", "dirty")
+	testkit.Commit(t, dirty, "x.txt", "x\n", "x")
+	testkit.MergeFF(t, repo, "dirty")
+	testkit.Dirty(t, dirty)
+	wip := testkit.AddWorktree(t, repo, ".worktrees/wip", "wip")
+	testkit.Commit(t, wip, "w.txt", "w\n", "wip")
+	home := testkit.TempDir(t)
+
+	out, code := session{t, home, repo, ""}.run("clean", "--dry-run")
+	assert.Equal(t, ExitOK, code, out)
+	assert.Contains(t, out, "Why the other 2 stay: 1 has unmerged work, 1 has uncommitted changes.")
+
+	out, code = session{t, home, repo, ""}.run("clean", "--dry-run", "--json")
+	assert.Equal(t, ExitOK, code, out)
+	assert.Contains(t, out, `"keptByReason": [`)
+	assert.Contains(t, out, `"reason": "clean"`)
+}
+
+func TestScanShowsLastCommit(t *testing.T) {
+	repo, _ := mergedRepo(t)
+	out, code := session{t, testkit.TempDir(t), repo, ""}.run("scan")
+	assert.Equal(t, ExitOK, code, out)
+	assert.Regexp(t, `SIZE\s+DEPS\s+COMMIT\s+AGE\s+ACTIVE`, out)
+	// testkit commits are dated 2026-01-01, so the commit is months old while the folder is new.
+	assert.Regexp(t, `worktree-done\s+claude\s+merged\s+\S+ \S+\s+\S+ \S+\s+\d+mo\s+now\s+now`, out)
 }

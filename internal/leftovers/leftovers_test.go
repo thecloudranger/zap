@@ -88,3 +88,21 @@ func TestResolveSlugLeadingDash(t *testing.T) {
 	require.NoError(t, os.MkdirAll(p, 0o755))
 	assert.Equal(t, p, resolveSlug(slug(p)))
 }
+
+func TestFindNoLabelsKeepsTotals(t *testing.T) {
+	home, _ := filepath.EvalSymlinks(t.TempDir())
+	tmp, _ := filepath.EvalSymlinks(t.TempDir())
+	api := filepath.Join(home, "dev", "api")
+	require.NoError(t, os.MkdirAll(api, 0o755))
+	write(t, filepath.Join(tmp, "claude-501", slug(api), "s1", "a.bin"), 40_000, time.Now())
+	write(t, filepath.Join(home, ".claude", "projects", slug(api), "s1.jsonl"), 9_000, time.Now())
+
+	with, err := Find(t.Context(), Options{Home: home, TmpRoot: tmp, UID: 501})
+	require.NoError(t, err)
+	without, err := Find(t.Context(), Options{Home: home, TmpRoot: tmp, UID: 501, NoLabels: true})
+	require.NoError(t, err)
+
+	assert.Equal(t, Total(with), Total(without))
+	assert.Equal(t, "~/dev/api", with[0].Items[0].Label)
+	assert.Empty(t, without[0].Items[0].Label)
+}

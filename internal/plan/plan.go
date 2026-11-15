@@ -39,9 +39,11 @@ type Item struct {
 	DeleteBranch bool                `json:"deleteBranch"`
 	BranchNote   string              `json:"branchNote,omitempty"`
 	Refusal      string              `json:"refusal,omitempty"` // why it is kept
+	KeptBy       string              `json:"keptBy,omitempty"`  // gate name, KeptNotOptedIn or KeptIdle
 	Eligible     bool                `json:"eligible"`          // passed every safety gate
 	Gates        []model.CheckResult `json:"gates"`
 	Size         *model.Usage        `json:"size,omitempty"`
+	LastCommit   time.Time           `json:"lastCommit,omitzero"`
 	Unlock       bool                `json:"unlock,omitempty"` // release a stale lock first
 	// Optional items (idle) are kept unless a person selects them in the picker.
 	Optional bool `json:"optional,omitempty"`
@@ -141,17 +143,19 @@ func snapshot(ctx context.Context, list func(context.Context) ([]procs.Proc, err
 }
 
 func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a model.Assessment, pol policy.Repo, gates []safety.Gate, optedIn bool, opt Options, running *safety.Procs) Item {
-	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason, Size: a.Facts.Size}
+	it := Item{Path: a.Path, Branch: a.Branch, Head: a.Head, Status: a.Verdict.Status, Reason: a.Verdict.Reason, Size: a.Facts.Size, LastCommit: a.Facts.LastCommit}
 	results, ok := safety.Evaluate(&safety.Subject{A: a, Target: rep.Target, Policy: pol, Now: opt.Now, Cwd: opt.Cwd,
 		Procs: running, UnlockStale: opt.UnlockStale}, gates)
 	it.Gates, it.Eligible = results, ok
 	switch {
 	case !ok:
-		it.Action, it.Refusal = Keep, firstFailure(results)
+		it.Action = Keep
+		it.KeptBy, it.Refusal = firstFailure(results)
 	case !optedIn:
-		it.Action, it.Refusal = Keep, "no "+policy.FileName+" in this repo (run `zap init` to opt in)"
+		it.Action, it.KeptBy = Keep, KeptNotOptedIn
+		it.Refusal = "no " + policy.FileName + " in this repo (run `zap init` to opt in)"
 	case a.Verdict.Status == model.StatusIdle:
-		it.Action, it.Optional = Keep, true
+		it.Action, it.Optional, it.KeptBy = Keep, true, KeptIdle
 		it.Refusal = "idle: unmerged work is only removed when picked in `zap`"
 	case a.Prunable:
 		it.Action = Prune
@@ -163,13 +167,14 @@ func planItem(ctx context.Context, git gitx.Runner, rep model.RepoReport, a mode
 	return it
 }
 
-func firstFailure(rs []model.CheckResult) string {
+// firstFailure names the first gate that refused, and its detail.
+func firstFailure(rs []model.CheckResult) (gate, detail string) {
 	for _, r := range rs {
 		if r.Outcome != model.Pass && r.Outcome != model.Skipped {
-			return r.Detail
+			return r.Check, r.Detail
 		}
 	}
-	return "refused"
+	return "", "refused"
 }
 
 // branchDecision deletes a branch only when its work is provably safe: the status

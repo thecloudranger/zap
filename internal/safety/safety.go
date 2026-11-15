@@ -229,8 +229,10 @@ func (NotCwd) Eval(s *Subject) model.CheckResult {
 	return pass("zap is not running inside it")
 }
 
-// NotInUse refuses a worktree that another process (a shell, editor or agent) is
-// working in. If processes cannot be listed, it refuses: doubt means keep.
+// NotInUse refuses a worktree that another process is working in: its current folder is
+// inside the worktree (a shell, a terminal editor, an agent started there). A GUI editor
+// that only has the folder open usually runs from elsewhere and is not seen yet (plan M14.2).
+// If processes cannot be listed, it refuses: doubt means keep.
 type NotInUse struct{}
 
 // Name implements Gate.
