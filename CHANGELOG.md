@@ -6,6 +6,8 @@ All notable changes to zap are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.4]
+
 ### Added
 
 - `zap scan` has a COMMIT column: when each worktree's branch last got a commit. The picker's
